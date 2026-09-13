@@ -1,0 +1,23 @@
+{
+  "rail.inicio": "Início",
+  "rail.prepare": "Preparar Projeto",
+  "rail.add": "Adicionar música",
+  "rail.remove": "Remover",
+  "rail.rebuild": "Recompilar & Backup",
+  "rail.iso": "Gerar ISO",
+  "rail.settings": "Configurações",
+  "title.inicio": "Início",
+  "title.prepare": "Preparar Projeto",
+  "title.add": "Adicionar música",
+  "title.remove": "Remover música",
+  "title.rebuild": "Recompilar DATs",
+  "title.backup": "Backup",
+  "title.iso": "Gerar ISO final",
+  "title.settings": "Configurações",
+  "settings.language": "Idioma",
+  "settings.tools": "Ferramentas do PC",
+  "settings.prefs": "Preferências do fluxo",
+  "settings.lang_label": "Idioma da interface",
+  "settings.support": "Suporte",
+  "pill.connecting": "conectando…"
+}

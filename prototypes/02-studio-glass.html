@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MC3 · Studio Glass</title>
+<style>
+  :root {
+    --text: #eef1f8; --muted: #a6adc8; --violet: #a78bfa; --sky: #56c9ff; --pink: #f472d0;
+    --good: #4ade9b; --danger: #fb7185;
+    --glass: rgba(255,255,255,0.055); --glass-2: rgba(255,255,255,0.09);
+    --stroke: rgba(255,255,255,0.14); --stroke-soft: rgba(255,255,255,0.08);
+    font-family: "SF Pro Display", "Segoe UI", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    color: var(--text); overflow: hidden;
+    background:
+      radial-gradient(1000px 700px at 8% 0%, #4c2a86 0%, transparent 55%),
+      radial-gradient(1000px 700px at 100% 10%, #10557a 0%, transparent 55%),
+      radial-gradient(900px 900px at 70% 120%, #7a2d6b 0%, transparent 55%),
+      #0c0e1a;
+  }
+  .app { display: flex; height: 100vh; }
+  .glass { background: var(--glass); backdrop-filter: blur(22px) saturate(1.3); border: 1px solid var(--stroke); }
+
+  .rail {
+    width: 216px; flex: 0 0 216px; margin: 14px 0 14px 14px; border-radius: 22px; padding: 22px 14px;
+    display: flex; flex-direction: column; gap: 5px;
+  }
+  .brand { display: flex; align-items: center; gap: 12px; padding: 4px 8px 22px; }
+  .logo { width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; font-weight: 800; color: #fff;
+    background: linear-gradient(135deg, var(--violet), var(--sky)); box-shadow: 0 8px 24px rgba(124,92,255,0.45); }
+  .brand h1 { font-size: 15px; font-weight: 700; } .brand span { font-size: 11.5px; color: var(--muted); }
+  .nav-item { display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-radius: 13px; color: var(--muted);
+    font-size: 14px; cursor: pointer; transition: all .18s; }
+  .nav-item:hover { background: var(--glass); color: var(--text); }
+  .nav-item.active { color: #fff; background: var(--glass-2); border: 1px solid var(--stroke-soft); box-shadow: inset 0 1px 0 rgba(255,255,255,0.12); }
+  .nav-item .ic { opacity: .85; width: 18px; text-align: center; }
+
+  .content { flex: 1; padding: 26px 34px; overflow-y: auto; }
+  .top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; }
+  .top h2 { font-size: 26px; font-weight: 700; letter-spacing: -0.3px; }
+  .top h2 b { background: linear-gradient(90deg, var(--violet), var(--sky)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+  .top .pill { font-size: 12px; color: var(--muted); padding: 8px 15px; border-radius: 999px; }
+
+  .card { border-radius: 22px; padding: 26px 28px; box-shadow: 0 24px 60px rgba(0,0,0,0.35); }
+  .badgerow { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .badge { font-size: 11px; font-weight: 700; letter-spacing: .5px; padding: 5px 11px; border-radius: 999px; }
+  .badge.step { color: #0c1a12; background: linear-gradient(135deg, var(--good), #7ef0bd); }
+  .badge.danger { color: #2a0a12; background: linear-gradient(135deg, var(--danger), #ff9db0); }
+  .lead { color: var(--muted); font-size: 13.5px; line-height: 1.6; margin: 8px 0 20px; max-width: 640px; }
+
+  .switch { display: inline-flex; background: rgba(0,0,0,0.25); border: 1px solid var(--stroke-soft); border-radius: 13px; padding: 4px; margin-bottom: 20px; }
+  .switch button { border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 13px; padding: 8px 18px; border-radius: 10px; cursor: pointer; transition: all .18s; }
+  .switch button.on { color: #fff; background: var(--glass-2); box-shadow: 0 2px 10px rgba(0,0,0,0.3); }
+
+  .pickrow { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+  .fbtn { border: 1px dashed var(--stroke); background: var(--glass); color: var(--text); font: inherit; font-size: 14px;
+    padding: 12px 18px; border-radius: 13px; cursor: pointer; transition: all .18s; }
+  .fbtn:hover { border-color: var(--violet); background: var(--glass-2); }
+  .fbtn.play { border-style: solid; }
+  .fname { color: var(--muted); font-size: 13px; }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 18px; margin-bottom: 18px; }
+  .field { display: flex; flex-direction: column; gap: 7px; }
+  .field label { font-size: 12px; color: var(--muted); }
+  .field input, .field select { background: rgba(0,0,0,0.28); border: 1px solid var(--stroke-soft); color: var(--text);
+    padding: 12px 14px; border-radius: 12px; font: inherit; font-size: 14px; transition: all .18s; }
+  .field input:focus, .field select:focus { outline: none; border-color: var(--violet); background: rgba(0,0,0,0.4); box-shadow: 0 0 0 4px rgba(167,139,250,0.14); }
+
+  .preview { border-radius: 15px; padding: 16px 18px; background: rgba(0,0,0,0.22); border: 1px solid var(--stroke-soft); margin-bottom: 20px; }
+  .preview .kv { display: flex; gap: 10px; font-size: 13px; color: var(--muted); padding: 3px 0; }
+  .preview .kv b { color: var(--sky); font-weight: 600; font-family: "SF Mono", ui-monospace, monospace; font-size: 12.5px; }
+
+  .pl-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+  .pl-head .t { font-size: 13px; color: var(--muted); }
+  .minibtn { border: 1px solid var(--stroke-soft); background: var(--glass); color: var(--text); font: inherit; font-size: 12px;
+    padding: 6px 12px; border-radius: 9px; cursor: pointer; transition: all .16s; }
+  .minibtn:hover { border-color: var(--violet); }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .pchip { font-size: 12.5px; padding: 8px 13px; border-radius: 11px; cursor: pointer; user-select: none;
+    background: rgba(0,0,0,0.25); border: 1px solid var(--stroke-soft); color: var(--muted); transition: all .16s; }
+  .pchip:hover { border-color: var(--stroke); }
+  .pchip.on { color: #fff; background: linear-gradient(135deg, rgba(167,139,250,0.35), rgba(86,201,255,0.25)); border-color: transparent; box-shadow: 0 4px 16px rgba(124,92,255,0.3); }
+  .pchip .city { color: var(--sky); font-weight: 600; }
+
+  .foot { display: flex; align-items: center; gap: 14px; margin-top: 22px; flex-wrap: wrap; }
+  .conf { display: flex; align-items: center; gap: 9px; font-size: 13px; color: var(--muted); flex: 1; min-width: 240px; }
+  .conf input { width: 17px; height: 17px; accent-color: var(--violet); }
+  .btn-add { border: 0; cursor: pointer; font: inherit; font-size: 14.5px; font-weight: 700; color: #fff;
+    padding: 13px 26px; border-radius: 14px; background: linear-gradient(135deg, var(--danger), var(--pink));
+    box-shadow: 0 12px 32px rgba(244,114,182,0.4); transition: all .16s; }
+  .btn-add:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
+  .btn-add:not(:disabled):hover { transform: translateY(-2px); filter: brightness(1.06); }
+  .prog { height: 8px; border-radius: 999px; background: rgba(0,0,0,0.3); overflow: hidden; margin-top: 18px; }
+  .prog > i { display: block; height: 100%; width: 0; border-radius: 999px; background: linear-gradient(90deg, var(--violet), var(--sky)); transition: width .3s; }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="rail glass">
+    <div class="brand"><div class="logo">MC3</div><div><h1>Music Manager</h1><span>Studio Glass</span></div></div>
+    <div class="nav-item"><span class="ic">◈</span> Início</div>
+    <div class="nav-item"><span class="ic">▤</span> Preparar Projeto</div>
+    <div class="nav-item active"><span class="ic">♪</span> Adicionar música</div>
+    <div class="nav-item"><span class="ic">☒</span> Remover</div>
+    <div class="nav-item"><span class="ic">⟳</span> Recompilar</div>
+    <div class="nav-item"><span class="ic">◉</span> Gerar ISO</div>
+  </aside>
+
+  <main class="content">
+    <div class="top">
+      <h2>Adicionar <b>música</b></h2>
+      <div class="pill glass">✔ rstm_build e strtbl prontos</div>
+    </div>
+
+    <div class="card glass">
+      <div class="badgerow"><span class="badge step">PASSO 2</span><span class="badge danger">DESTRUTIVO</span></div>
+      <p class="lead">Escolha o MP3/FLAC/WAV direto — a conversão para RSM é automática ao adicionar. Instala a faixa (converte, playlists, strings, recompila) com backup automático antes.</p>
+
+      <div class="switch"><button class="on">♪ Uma música</button><button>♫ Lote</button></div>
+
+      <div class="pickrow">
+        <button class="fbtn" id="pick">🎵 Escolher áudio…</button>
+        <button class="fbtn play">▶ Ouvir</button>
+        <span class="fname" id="fname">nenhum arquivo selecionado</span>
+      </div>
+
+      <div class="grid">
+        <div class="field"><label>Título</label><input id="title" value="Aguila" /></div>
+        <div class="field"><label>Artista</label><input id="artist" value="Aztec Mystic" /></div>
+        <div class="field"><label>Gênero</label><select id="genre"><option>Techno</option><option>Dancehall</option><option>Drum_N_Bass</option><option>HipHop</option><option>Rock</option></select></div>
+        <div class="field"><label>Nome interno (auto)</label><input id="asset" placeholder="(automático)" /></div>
+      </div>
+
+      <div class="preview">
+        <div class="kv">Chave mcstrings: <b id="pv-key">music_Techno_AztecMystic_Aguila</b></div>
+        <div class="kv">Entrada de playlist: <b id="pv-entry">music\Techno\AztecMystic_Aguila</b></div>
+        <div class="kv">Destino .rsm: <b id="pv-target">STREAMS\Music\Techno\AztecMystic_Aguila.rsm</b></div>
+      </div>
+
+      <div class="pl-head">
+        <span class="t">Playlists de destino</span>
+        <button class="minibtn" data-preset="all">Padrão completo</button>
+        <button class="minibtn" data-preset="genre">Só gênero</button>
+        <button class="minibtn" data-preset="city">Só cidades</button>
+        <button class="minibtn" data-preset="none">Limpar</button>
+        <span class="t" id="plcount" style="margin-left:auto">0 selecionadas</span>
+      </div>
+      <div class="chips" id="chips"></div>
+
+      <div class="prog"><i id="bar"></i></div>
+      <div class="foot">
+        <label class="conf"><input type="checkbox" id="conf" /> Entendo que isto altera o workspace (há backup automático)</label>
+        <button class="btn-add" id="add" disabled>➕ Adicionar música</button>
+      </div>
+    </div>
+  </main>
+</div>
+<script>
+  const cities = ["atlanta", "detroit", "san diego", "tokyo"];
+  const kinds = ["techno_race_music.play", "pop_race_music.play"];
+  const chipsEl = document.getElementById("chips");
+  cities.forEach((c) => kinds.forEach((k) => {
+    const el = document.createElement("div");
+    el.className = "pchip"; el.dataset.city = c; el.dataset.name = k;
+    el.innerHTML = '<span class="city">' + c + '</span> · ' + k;
+    if (k.startsWith("techno")) el.dataset.genre = "1"; if (k === c + ".play") el.dataset.cityfile = "1";
+    chipsEl.appendChild(el);
+  }));
+  cities.forEach((c) => { const el = document.createElement("div"); el.className = "pchip"; el.dataset.city = c; el.dataset.name = c + ".play"; el.dataset.cityfile = "1"; el.innerHTML = '<span class="city">' + c + '</span> · ' + c + '.play'; chipsEl.appendChild(el); });
+
+  const chips = () => [...chipsEl.querySelectorAll(".pchip")];
+  function count() {
+    const n = chips().filter((c) => c.classList.contains("on")).length;
+    document.getElementById("plcount").textContent = n + " selecionadas";
+    document.getElementById("add").disabled = !(n && document.getElementById("conf").checked);
+  }
+  chips().forEach((c) => c.addEventListener("click", () => { c.classList.toggle("on"); count(); }));
+  document.querySelectorAll("[data-preset]").forEach((b) => b.addEventListener("click", () => {
+    const p = b.dataset.preset;
+    chips().forEach((c) => {
+      c.classList.toggle("on",
+        p === "all" ? true : p === "none" ? false : p === "genre" ? c.dataset.genre === "1" : c.dataset.cityfile === "1");
+    });
+    count();
+  }));
+  document.getElementById("conf").addEventListener("change", count);
+  document.getElementById("pick").addEventListener("click", () => {
+    document.getElementById("fname").textContent = "AztecMystic - Aguila.mp3";
+    document.getElementById("fname").style.color = "#eef1f8";
+  });
+  function preview() {
+    const g = document.getElementById("genre").value;
+    const asset = (document.getElementById("artist").value.replace(/\W+/g, "") + "_" + document.getElementById("title").value.replace(/\W+/g, "")) || "auto";
+    document.getElementById("pv-key").textContent = "music_" + g + "_" + asset;
+    document.getElementById("pv-entry").textContent = "music\\" + g + "\\" + asset;
+    document.getElementById("pv-target").textContent = "STREAMS\\Music\\" + g + "\\" + asset + ".rsm";
+    document.getElementById("asset").placeholder = asset;
+  }
+  ["title", "artist", "genre"].forEach((id) => document.getElementById(id).addEventListener("input", preview));
+  document.getElementById("add").addEventListener("click", () => {
+    const bar = document.getElementById("bar"); let p = 0; bar.style.width = "0%";
+    const t = setInterval(() => { p += Math.random() * 15 + 6; if (p >= 100) { p = 100; clearInterval(t); } bar.style.width = p + "%"; }, 220);
+  });
+  document.querySelectorAll(".nav-item").forEach((it) => it.addEventListener("click", () => { document.querySelectorAll(".nav-item").forEach((n) => n.classList.remove("active")); it.classList.add("active"); }));
+  document.querySelectorAll(".switch button").forEach((b) => b.addEventListener("click", () => { document.querySelectorAll(".switch button").forEach((x) => x.classList.remove("on")); b.classList.add("on"); }));
+  count(); preview();
+</script>
+</body>
+</html>

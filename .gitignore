@@ -1,0 +1,56 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# GAME CONTENT — NEVER commit/ship. This is copyrighted Rockstar material and
+# each user must supply their OWN copy of Midnight Club 3: DUB Edition Remix.
+# The app generates all of it from the user's ISO (Preparar Projeto).
+# ─────────────────────────────────────────────────────────────────────────────
+/iso/
+/Arquivos da ISO/
+/ASSETS/
+/STREAMS/
+/ASSETS.DAT
+/STREAMS.DAT
+/STREAMS.LST
+/mcstrings02.json
+/mcstrings02.strtbl
+/backups/
+
+# Runtime state (contains local absolute paths, e.g. the last ISO used)
+/options.json
+
+# Build output
+/build_out/
+/build/
+/dist/
+*.spec.bak
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+.venv/
+venv/
+
+# OS / editor
+Thumbs.db
+desktop.ini
+.DS_Store
+.vscode/
+.idea/
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BINÁRIOS DE TERCEIROS grandes (189 MB). NÃO versionados: são redistribuíveis
+# baixáveis, e a origem exata da build está documentada em LICENSES.md
+# (https://www.gyan.dev/ffmpeg/builds/). O app precisa deles em tempo de
+# execução — veja "Ferramentas externas" no README para repor numa cópia nova.
+# As ferramentas PS2 da comunidade (rstm_build/ps2str/MFAudio/encvag) FICAM
+# versionadas: são pequenas e difíceis de reobter.
+# ─────────────────────────────────────────────────────────────────────────────
+/tools/wav to rsm/ffmpeg.exe
+/tools/wav to rsm/ffprobe.exe
+
+# Transcrições de sessão de IA — não são código-fonte
+/_claude-backup/
+
+# Scratch da recompilacao de DATs (limpo sozinho; so sobra se o app for morto)
+/.mc3_rebuild/

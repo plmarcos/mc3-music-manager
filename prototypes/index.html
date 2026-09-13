@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MC3 · Protótipos de UI/UX</title>
+<style>
+  :root {
+    --bg: #08090d; --card: #12141a; --line: #23262f; --text: #eaecf2; --muted: #9098a8;
+    --a1: #ff2d95; --a2: #8b5cff; --a3: #56c9ff; --a4: #3ddc97;
+    font-family: "Segoe UI", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    color: var(--text); min-height: 100vh; padding: 54px 40px 80px;
+    background:
+      radial-gradient(800px 500px at 10% -5%, rgba(139,92,255,0.18), transparent 60%),
+      radial-gradient(700px 500px at 100% 0%, rgba(86,201,255,0.12), transparent 55%),
+      var(--bg);
+  }
+  header { max-width: 1240px; margin: 0 auto 40px; }
+  .eyebrow { font-size: 12px; letter-spacing: 3px; text-transform: uppercase; color: var(--muted); }
+  h1 { font-size: 42px; font-weight: 900; letter-spacing: -1px; margin-top: 12px;
+    background: linear-gradient(92deg, #fff, var(--a2) 55%, var(--a3)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+  header p { color: var(--muted); font-size: 15px; margin-top: 14px; max-width: 640px; line-height: 1.6; }
+
+  .grid { max-width: 1240px; margin: 0 auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(370px, 1fr)); gap: 26px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; overflow: hidden;
+    transition: transform .22s ease, box-shadow .22s ease, border-color .22s; }
+  .card:hover { transform: translateY(-6px); box-shadow: 0 30px 70px rgba(0,0,0,0.5); }
+  .card[data-a="1"]:hover { border-color: rgba(255,45,149,0.5); }
+  .card[data-a="2"]:hover { border-color: rgba(139,92,255,0.5); }
+  .card[data-a="3"]:hover { border-color: rgba(61,220,151,0.5); }
+
+  .chrome { display: flex; align-items: center; gap: 7px; padding: 11px 14px; border-bottom: 1px solid var(--line); background: rgba(0,0,0,0.25); }
+  .chrome i { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
+  .chrome i:nth-child(1) { background: #ff5f57; } .chrome i:nth-child(2) { background: #febc2e; } .chrome i:nth-child(3) { background: #28c840; }
+  .chrome .u { margin-left: 10px; font-size: 11.5px; color: var(--muted); font-family: ui-monospace, monospace; }
+
+  .frame { position: relative; height: 258px; overflow: hidden; background: #000; cursor: pointer; }
+  .frame iframe { width: 1280px; height: 800px; border: 0; transform: scale(0.322); transform-origin: top left; pointer-events: none; }
+  .frame .open { position: absolute; inset: 0; display: grid; place-items: center; opacity: 0; transition: opacity .2s;
+    background: linear-gradient(180deg, rgba(8,9,13,0.1), rgba(8,9,13,0.55)); }
+  .frame:hover .open { opacity: 1; }
+  .frame .open span { font-size: 13px; font-weight: 700; padding: 11px 20px; border-radius: 999px; color: #fff;
+    background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.25); backdrop-filter: blur(6px); }
+
+  .meta { padding: 18px 20px 22px; }
+  .meta .row { display: flex; align-items: center; gap: 10px; }
+  .swatches { display: flex; gap: 5px; margin-left: auto; }
+  .swatches i { width: 15px; height: 15px; border-radius: 5px; display: inline-block; }
+  .meta h3 { font-size: 18px; font-weight: 750; }
+  .meta p { color: var(--muted); font-size: 13px; line-height: 1.55; margin-top: 8px; }
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+  .tag { font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; }
+  .openbtn { display: inline-flex; align-items: center; gap: 7px; margin-top: 16px; text-decoration: none;
+    font-size: 13px; font-weight: 700; color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 10px 16px; transition: all .16s; }
+  .openbtn:hover { border-color: var(--a3); color: #fff; }
+  footer { max-width: 1240px; margin: 46px auto 0; color: var(--muted); font-size: 12.5px; border-top: 1px solid var(--line); padding-top: 22px; line-height: 1.7; }
+  footer b { color: var(--text); }
+</style>
+</head>
+<body>
+  <header>
+    <div class="eyebrow">MC3 Music Manager · Web-view</div>
+    <h1>Protótipos de UI / UX</h1>
+    <p>Três direções de design bonitas e funcionais para o app — cada uma aplicada a uma tela diferente. Passe o mouse para pré-visualizar ao vivo e clique para abrir em tela cheia. São interativos: navegação, seleção, preview e progresso funcionam.</p>
+  </header>
+
+  <div class="grid">
+    <div class="card" data-a="1">
+      <div class="chrome"><i></i><i></i><i></i><span class="u">01-midnight-neon.html · Início</span></div>
+      <a class="frame" href="01-midnight-neon.html"><iframe src="01-midnight-neon.html" loading="lazy" title="Midnight Neon"></iframe><div class="open"><span>Abrir em tela cheia ↗</span></div></a>
+      <div class="meta">
+        <div class="row"><h3>Midnight Neon</h3><div class="swatches"><i style="background:#ff2d95"></i><i style="background:#8b5cff"></i><i style="background:#19e3e3"></i></div></div>
+        <p>Synthwave que abraça a estética noturna do Midnight Club: neon, brilho, grade e contadores animados. Ousado, "gamer", mas com hierarquia clara. Tela mostrada: <b>Início</b> (painel + passo a passo).</p>
+        <div class="tags"><span class="tag">synthwave</span><span class="tag">glow</span><span class="tag">dashboard</span><span class="tag">animações</span></div>
+        <a class="openbtn" href="01-midnight-neon.html">Abrir protótipo →</a>
+      </div>
+    </div>
+
+    <div class="card" data-a="2">
+      <div class="chrome"><i></i><i></i><i></i><span class="u">02-studio-glass.html · Adicionar</span></div>
+      <a class="frame" href="02-studio-glass.html"><iframe src="02-studio-glass.html" loading="lazy" title="Studio Glass"></iframe><div class="open"><span>Abrir em tela cheia ↗</span></div></a>
+      <div class="meta">
+        <div class="row"><h3>Studio Glass</h3><div class="swatches"><i style="background:#a78bfa"></i><i style="background:#56c9ff"></i><i style="background:#f472d0"></i></div></div>
+        <p>Glassmorphism moderno: vidro fosco, gradientes suaves, respiro e foco no conteúdo. Profissional e elegante. Tela mostrada: <b>Adicionar música</b> com preview ao vivo, chips de playlist e progresso.</p>
+        <div class="tags"><span class="tag">glassmorphism</span><span class="tag">blur</span><span class="tag">form</span><span class="tag">preview ao vivo</span></div>
+        <a class="openbtn" href="02-studio-glass.html">Abrir protótipo →</a>
+      </div>
+    </div>
+
+    <div class="card" data-a="3">
+      <div class="chrome"><i></i><i></i><i></i><span class="u">03-rack-minimal.html · Remover</span></div>
+      <a class="frame" href="03-rack-minimal.html"><iframe src="03-rack-minimal.html" loading="lazy" title="Rack Minimal"></iframe><div class="open"><span>Abrir em tela cheia ↗</span></div></a>
+      <div class="meta">
+        <div class="row"><h3>Rack Minimal</h3><div class="swatches"><i style="background:#3ddc97"></i><i style="background:#e6e8ec"></i><i style="background:#24262c"></i></div></div>
+        <p>Estilo ferramenta-pro (Linear/Vercel): denso, alto contraste, cromo mínimo, tipografia afiada e um único acento. Ideal para dados. Tela mostrada: <b>Remover</b> — tabela com filtro, busca e seleção.</p>
+        <div class="tags"><span class="tag">minimal</span><span class="tag">data-table</span><span class="tag">denso</span><span class="tag">filtro + busca</span></div>
+        <a class="openbtn" href="03-rack-minimal.html">Abrir protótipo →</a>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <b>Como usar:</b> abra <b>prototypes/index.html</b> no navegador (ou clique em cada card). São mockups independentes (HTML/CSS/JS puro, sem backend) só para avaliar direção visual — a lógica real já vive em <b>frontend/</b>. Escolha um rumo e eu aplico o tema no app de verdade.
+  </footer>
+</body>
+</html>

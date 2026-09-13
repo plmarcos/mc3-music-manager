@@ -1,0 +1,23 @@
+{
+  "rail.inicio": "Home",
+  "rail.prepare": "Prepare Project",
+  "rail.add": "Add music",
+  "rail.remove": "Remove",
+  "rail.rebuild": "Rebuild & Backup",
+  "rail.iso": "Generate ISO",
+  "rail.settings": "Settings",
+  "title.inicio": "Home",
+  "title.prepare": "Prepare Project",
+  "title.add": "Add music",
+  "title.remove": "Remove music",
+  "title.rebuild": "Rebuild DATs",
+  "title.backup": "Backup",
+  "title.iso": "Generate final ISO",
+  "title.settings": "Settings",
+  "settings.language": "Language",
+  "settings.tools": "PC tools",
+  "settings.prefs": "Workflow defaults",
+  "settings.lang_label": "Interface language",
+  "settings.support": "Support",
+  "pill.connecting": "connecting…"
+}

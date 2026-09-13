@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MC3 · Rack Minimal</title>
+<style>
+  :root {
+    --bg: #0b0c0e; --panel: #131417; --panel-2: #17191d; --line: #24262c; --line-2: #2e3138;
+    --text: #e6e8ec; --muted: #8b909a; --dim: #626772;
+    --accent: #3ddc97; --accent-dim: rgba(61,220,151,0.14); --danger: #ff5c6c;
+    --mono: "SF Mono", "Cascadia Code", ui-monospace, monospace;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body { color: var(--text); background: var(--bg); overflow: hidden; font-size: 14px; }
+  .app { display: flex; height: 100vh; }
+
+  .rail { width: 208px; flex: 0 0 208px; border-right: 1px solid var(--line); padding: 16px 10px; display: flex; flex-direction: column; gap: 2px; }
+  .brand { display: flex; align-items: center; gap: 10px; padding: 6px 10px 18px; }
+  .logo { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; font-weight: 800; font-size: 12px; color: #0b0c0e; background: var(--accent); }
+  .brand h1 { font-size: 13.5px; font-weight: 650; } .brand span { font-size: 11px; color: var(--dim); }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 8px 11px; border-radius: 7px; color: var(--muted); font-size: 13.5px; cursor: pointer; transition: background .12s, color .12s; }
+  .nav-item .ic { width: 16px; text-align: center; color: var(--dim); font-size: 13px; }
+  .nav-item:hover { background: var(--panel); color: var(--text); }
+  .nav-item.active { background: var(--panel-2); color: var(--text); }
+  .nav-item.active .ic { color: var(--accent); }
+  .kbd { margin-left: auto; font-family: var(--mono); font-size: 10px; color: var(--dim); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
+
+  .content { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .head { padding: 16px 22px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 14px; }
+  .head h2 { font-size: 16px; font-weight: 650; }
+  .head .sub { font-size: 12.5px; color: var(--muted); }
+  .head .spacer { flex: 1; }
+  .stat { font-size: 12px; color: var(--muted); font-family: var(--mono); }
+  .stat b { color: var(--text); }
+
+  .toolbar { padding: 12px 22px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .inp, .sel { background: var(--panel); border: 1px solid var(--line); color: var(--text); font: inherit; font-size: 13px; padding: 8px 11px; border-radius: 7px; }
+  .inp { flex: 1; min-width: 180px; }
+  .inp::placeholder { color: var(--dim); }
+  .inp:focus, .sel:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+  .sel { min-width: 150px; }
+  .tbtn { background: var(--panel); border: 1px solid var(--line); color: var(--muted); font: inherit; font-size: 12.5px; padding: 8px 12px; border-radius: 7px; cursor: pointer; transition: all .12s; }
+  .tbtn:hover { border-color: var(--line-2); color: var(--text); }
+
+  .table-wrap { flex: 1; overflow-y: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  thead th { position: sticky; top: 0; background: var(--bg); z-index: 1; text-align: left;
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: .6px; color: var(--dim); font-weight: 600;
+    padding: 10px 22px; border-bottom: 1px solid var(--line); }
+  th.c-chk, td.c-chk { width: 42px; } th.c-num, td.c-num { width: 90px; text-align: center; }
+  tbody td { padding: 9px 22px; border-bottom: 1px solid rgba(36,38,44,0.6); font-size: 13.5px; }
+  tbody tr { transition: background .1s; cursor: pointer; }
+  tbody tr:hover { background: var(--panel); }
+  tbody tr.sel { background: var(--accent-dim); }
+  tbody tr.hidden { display: none; }
+  .c-genre { color: var(--accent); font-family: var(--mono); font-size: 12px; }
+  .c-name { font-weight: 500; } .c-num { text-align: center; color: var(--muted); font-family: var(--mono); font-size: 12.5px; }
+  .yes { color: var(--accent); } .no { color: var(--danger); }
+  input[type=checkbox] { accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
+
+  .footer { border-top: 1px solid var(--line); padding: 14px 22px; display: flex; align-items: center; gap: 14px; background: var(--panel); }
+  .opts { display: flex; gap: 16px; font-size: 12.5px; color: var(--muted); flex-wrap: wrap; }
+  .opts label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .danger-zone { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+  .conf { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--muted); }
+  .btn-rm { background: var(--danger); border: 0; color: #1a0508; font: inherit; font-size: 13px; font-weight: 650; padding: 9px 18px; border-radius: 7px; cursor: pointer; transition: all .12s; }
+  .btn-rm:disabled { opacity: .4; cursor: not-allowed; }
+  .btn-rm:not(:disabled):hover { filter: brightness(1.08); box-shadow: 0 4px 16px rgba(255,92,108,0.35); }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="rail">
+    <div class="brand"><div class="logo">M3</div><div><h1>Music Manager</h1><span>Rack Minimal</span></div></div>
+    <div class="nav-item"><span class="ic">◈</span> Início</div>
+    <div class="nav-item"><span class="ic">▤</span> Preparar</div>
+    <div class="nav-item"><span class="ic">+</span> Adicionar</div>
+    <div class="nav-item active"><span class="ic">−</span> Remover <span class="kbd">R</span></div>
+    <div class="nav-item"><span class="ic">⟳</span> Recompilar</div>
+    <div class="nav-item"><span class="ic">◉</span> Gerar ISO</div>
+  </aside>
+
+  <main class="content">
+    <div class="head">
+      <div><h2>Biblioteca de músicas</h2></div>
+      <div class="spacer"></div>
+      <div class="stat"><b id="stCount">0</b> músicas · <b>84</b> playlists</div>
+    </div>
+
+    <div class="toolbar">
+      <select class="sel" id="genre">
+        <option value="__all">Todos os gêneros</option>
+        <option>Dancehall</option><option>Drum_N_Bass</option><option>HipHop</option>
+        <option>Instrumental</option><option>Rock</option><option>Techno</option>
+      </select>
+      <input class="inp" id="search" placeholder="buscar por nome interno…" />
+      <button class="tbtn" id="all">Marcar visíveis</button>
+      <button class="tbtn" id="none">Limpar</button>
+      <span class="stat" id="selInfo" style="margin-left:auto">0 selecionadas</span>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th class="c-chk"></th><th>Gênero</th><th>Nome interno</th>
+          <th class="c-num">Playlists</th><th class="c-num">Strings</th>
+        </tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+
+    <div class="footer">
+      <div class="opts">
+        <span style="color:var(--dim)">Remover:</span>
+        <label><input type="checkbox" checked> áudio (.rsm)</label>
+        <label><input type="checkbox" checked> playlists</label>
+        <label><input type="checkbox" checked> strings</label>
+        <label><input type="checkbox"> recompilar depois</label>
+      </div>
+      <div class="danger-zone">
+        <label class="conf"><input type="checkbox" id="conf"> confirmo que apaga arquivos</label>
+        <button class="btn-rm" id="rm" disabled>Remover selecionadas</button>
+      </div>
+    </div>
+  </main>
+</div>
+<script>
+  const data = [
+    ["Dancehall","BeenieMan_Dude",12,1],["Dancehall","LadySaw_StripTease",12,1],["Dancehall","MIA_FireFire",12,1],
+    ["Dancehall","SeanPaul_LikeGlue",12,1],["Dancehall","TwoCC_AndDance",12,1],["Dancehall","UptightSS_RighteousDub",12,0],
+    ["Drum_N_Bass","Aquasky_Spectre",12,1],["Drum_N_Bass","BlameArtificialIntelligence",12,1],["Drum_N_Bass","Calyx_AreYouReady",12,1],
+    ["Drum_N_Bass","Calyx_ChasingShadows",12,1],["Drum_N_Bass","Calyx_CollisionCourse",12,1],
+    ["HipHop","Doom_RappSnitch",12,1],["HipHop","MF_Kookies",12,1],["HipHop","Nas_MadeYouLook",12,1],
+    ["Instrumental","Amon_Tobin_Verbal",12,0],["Instrumental","RJD2_Ghostwriter",12,1],
+    ["Rock","QOTSA_GoWithFlow",12,1],["Rock","TheHives_MainOffender",12,1],["Rock","Yeah3_MapsRemix",12,1],
+    ["Techno","AztecMystic_Aguila",12,1],["Techno","Fix_Flash",12,1],["Techno","Martian_Stardancer",12,1],
+    ["Techno","PlumpDJs_TheRubOff",12,1],["Techno","Underground_HiTech",12,0],
+  ];
+  const rows = document.getElementById("rows");
+  rows.innerHTML = data.map((d, i) => (
+    '<tr data-genre="' + d[0] + '" data-name="' + d[1].toLowerCase() + '">' +
+    '<td class="c-chk"><input type="checkbox" data-i="' + i + '"></td>' +
+    '<td class="c-genre">' + d[0] + '</td>' +
+    '<td class="c-name">' + d[1] + '</td>' +
+    '<td class="c-num">' + d[2] + '</td>' +
+    '<td class="c-num ' + (d[3] ? "yes" : "no") + '">' + (d[3] ? "✓" : "✗") + '</td>' +
+    '</tr>'
+  )).join("");
+  document.getElementById("stCount").textContent = data.length;
+
+  const trs = [...rows.querySelectorAll("tr")];
+  const boxes = [...rows.querySelectorAll("input[type=checkbox]")];
+  function sync() {
+    let n = 0;
+    trs.forEach((tr) => { const b = tr.querySelector("input"); tr.classList.toggle("sel", b.checked); if (b.checked) n++; });
+    document.getElementById("selInfo").textContent = n + " selecionadas";
+    document.getElementById("rm").disabled = !(n && document.getElementById("conf").checked);
+  }
+  trs.forEach((tr) => tr.addEventListener("click", (e) => { if (e.target.tagName !== "INPUT") { const b = tr.querySelector("input"); b.checked = !b.checked; } sync(); }));
+  function filter() {
+    const q = document.getElementById("search").value.trim().toLowerCase();
+    const g = document.getElementById("genre").value;
+    trs.forEach((tr) => {
+      const show = (!q || tr.dataset.name.includes(q)) && (g === "__all" || tr.dataset.genre === g);
+      tr.classList.toggle("hidden", !show);
+    });
+  }
+  document.getElementById("search").addEventListener("input", filter);
+  document.getElementById("genre").addEventListener("change", filter);
+  document.getElementById("all").addEventListener("click", () => { trs.filter((t) => !t.classList.contains("hidden")).forEach((t) => t.querySelector("input").checked = true); sync(); });
+  document.getElementById("none").addEventListener("click", () => { boxes.forEach((b) => b.checked = false); sync(); });
+  document.getElementById("conf").addEventListener("change", sync);
+  document.querySelectorAll(".nav-item").forEach((it) => it.addEventListener("click", () => { document.querySelectorAll(".nav-item").forEach((n) => n.classList.remove("active")); it.classList.add("active"); }));
+  sync();
+</script>
+</body>
+</html>

@@ -1,0 +1,3 @@
+# Web-view edition of the MC3 Music Manager.
+# The native OS webview (Edge WebView2) is used on Windows, so no Chromium is bundled.
+pywebview>=6.2

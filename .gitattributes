@@ -1,0 +1,10 @@
+# O fonte deste projeto esta em LF no disco. Sem isto, o core.autocrlf padrao do
+# Git for Windows reescreveria tudo para CRLF no proximo checkout, produzindo um
+# diff gigante e sem sentido.
+* text=auto eol=lf
+
+# Binarios: nunca normalizar.
+*.exe  binary
+*.dll  binary
+*.ico  binary
+*.png  binary
