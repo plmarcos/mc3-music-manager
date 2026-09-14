@@ -27,6 +27,11 @@
   --accent: var(--violet);
   --accent-2: var(--cyan);
 
+  /* Veu sobre a foto de fundo. Mais opaco = texto mais legivel, foto menos visivel.
+     Um degrade (nao uma cor chapada) porque o topo da foto e ceu escuro e a base e
+     asfalto com reflexo forte, que e onde ficam os consoles. */
+  --bg-veil: linear-gradient(180deg, rgba(7, 5, 16, 0.50) 0%, rgba(7, 5, 16, 0.62) 45%, rgba(7, 5, 16, 0.78) 100%);
+
   --radius: 16px;
   --shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
   font-family: "Segoe UI", "SF Pro Display", Roboto, system-ui, sans-serif;
@@ -40,6 +45,12 @@
    stay visible. Never remove this — any `hidden` element with a display rule breaks. */
 [hidden] { display: none !important; }
 
+/* Foto de fundo. As camadas de `background` empilham do TOPO para a BASE, ou seja:
+   os brilhos neon ficam por cima, depois o veu escuro, e a foto embaixo de tudo.
+   O veu (--bg-veil) e o que mantem o texto legivel: a foto tem faixas muito claras
+   (farois, o claroo laranja) que, sem ele, comem o texto dos consoles.
+   Para trocar a foto: substitua frontend/img/bg-nightdrive.webp.
+   Para voltar ao fundo liso: apague as duas linhas marcadas com FOTO. */
 html, body {
   margin: 0;
   height: 100%;
@@ -49,6 +60,8 @@ html, body {
     radial-gradient(900px 500px at 12% -8%, rgba(255, 45, 149, 0.18), transparent 60%),
     radial-gradient(900px 600px at 100% 0%, rgba(25, 227, 227, 0.14), transparent 55%),
     radial-gradient(1200px 800px at 60% 120%, rgba(139, 92, 255, 0.20), transparent 60%),
+    var(--bg-veil),                                                      /* FOTO */
+    url("../img/bg-nightdrive.webp") center center / cover no-repeat,    /* FOTO */
     var(--bg);
 }
 /* faint perspective grid, faded toward the edges */
