@@ -57,6 +57,25 @@ class WavToRsmRoundTrip(unittest.TestCase):
             core.convert_audio_to_rsm(Path("does-not-exist.wav"))
 
 
+def _fake_tool_output(target: Path) -> None:
+    """Bytes que uma ferramenta de verdade produziria para este destino.
+
+    Para um .rsm isso precisa ser um RSTM valido: o _publish_rsm passa a saida
+    por conform_rsm_to_game(), que (com razao) recusa qualquer coisa sem o
+    cabecalho RSTM. Antes as mocks gravavam b"x"*16 e passavam."""
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if target.suffix.lower() == ".rsm":
+        header = bytearray(0x800)
+        header[0:4] = b"RSTM"
+        header[0x0C:0x10] = (2).to_bytes(4, "little")          # estereo
+        body = bytearray([0x0C] + [0x00] * 15) * 4
+        header[0x18:0x1C] = len(body).to_bytes(4, "little")
+        header[0x20:0x24] = len(body).to_bytes(4, "little")
+        target.write_bytes(bytes(header) + bytes(body))
+    else:
+        target.write_bytes(b"x" * 16)
+
+
 class ConversionScratchHygiene(unittest.TestCase):
     """Regression: WinError 32 batch crash + scratch polluting STREAMS.DAT."""
 
@@ -75,8 +94,7 @@ class ConversionScratchHygiene(unittest.TestCase):
 
             def fake_run(cmd, cwd=None, log=None, input_text="", timeout=None):
                 target = Path(cmd[-1])
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_bytes(b"x" * 16)  # non-empty: a real tool produces bytes
+                _fake_tool_output(target)
                 if "ffmpeg" in str(cmd[0]).lower():
                     seen["wav"] = target
                 return (0, "")
@@ -109,7 +127,7 @@ class ConversionScratchHygiene(unittest.TestCase):
             def fake_run(cmd, cwd=None, log=None, input_text="", timeout=None):
                 target = Path(cmd[-1])
                 target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_bytes(b"x" * 16)
+                _fake_tool_output(target)
                 if "ffmpeg" in str(cmd[0]).lower():
                     seen["wav_out"] = target
                 else:
@@ -1039,6 +1057,205 @@ class DestructiveFailureCarriesBackup(unittest.TestCase):
             backup = getattr(ctx.exception, core.BACKUP_ATTR, None)
             self.assertTrue(backup and Path(backup).is_dir(),
                             "o erro devia carregar o backup, veio %r" % (backup,))
+
+
+def _fake_rsm(path, *, channels=2, rate=44100, frames=8, init_frame=False,
+              field_24=0, loop_start=0, loop_end=None):
+    """Monta um .rsm no formato CRU que o rstm_build entrega (sem init, 0x24=0)."""
+    frame = 0x10 * channels
+    body = (bytes(frame) if init_frame else b"") + bytes(
+        bytearray([0x0C] + [0x00] * 15) * frames * channels)
+    header = bytearray(0x800)
+    header[0:4] = b"RSTM"
+    def put(off, val):
+        header[off:off + 4] = int(val).to_bytes(4, "little")
+    put(0x08, rate)
+    put(0x0C, channels)
+    put(0x18, len(body))
+    put(0x1C, loop_start)
+    put(0x20, len(body) if loop_end is None else loop_end)
+    put(0x24, field_24)
+    path.write_bytes(bytes(header) + body)
+    return path
+
+
+def _rsm_fields(path):
+    d = Path(path).read_bytes()
+    u = lambda o: int.from_bytes(d[o:o + 4], "little")
+    channels = u(0x0C)
+    frame = 0x10 * channels
+    return {
+        "rate": u(0x08), "channels": channels, "size": u(0x18),
+        "loop_start": u(0x1C), "loop_end": u(0x20), "field_24": u(0x24),
+        "init_frame": d[0x800:0x800 + frame] == bytes(frame),
+        "size_matches_file": 0x800 + u(0x18) == len(d),
+        "body": d[0x800:],
+    }
+
+
+class RstmGameConformance(unittest.TestCase):
+    """Faixa adicionada ficava MUDA no jogo.
+
+    Medido nos 135 .rsm de musica que vieram do proprio jogo — os 135 iguais:
+      sample rate 32000 | loop start 32 | 0x24 = 0xFFFFFFFF | 1o frame zerado.
+    O rstm_build entregava 44100 (o que o nosso ffmpeg pedia), loop start 0,
+    0x24 = 0 (campo que ele NUNCA escreve) e removia o frame de init."""
+
+    def test_conform_restores_every_game_invariant(self):
+        with tempfile.TemporaryDirectory() as td:
+            rsm = _fake_rsm(Path(td) / "cru.rsm")
+            audio_antes = _rsm_fields(rsm)["body"]
+
+            mudou = core.conform_rsm_to_game(rsm)
+            f = _rsm_fields(rsm)
+
+            self.assertTrue(f["init_frame"], "o frame de init do SPU tem de voltar")
+            self.assertEqual(f["loop_start"], 32, "loop start = 1 frame estereo")
+            self.assertEqual(f["field_24"], core.RSTM_NO_LOOP)
+            self.assertEqual(f["loop_end"], f["size"], "loop_end == tamanho, como no jogo")
+            self.assertTrue(f["size_matches_file"], "0x18 tem de bater com o arquivo")
+            self.assertEqual(f["body"][32:], audio_antes, "o audio nao pode ser tocado")
+            self.assertIn("frame de init", mudou)
+            self.assertIn("campo 0x24", mudou)
+
+    def test_conform_is_idempotent(self):
+        with tempfile.TemporaryDirectory() as td:
+            rsm = _fake_rsm(Path(td) / "cru.rsm")
+            core.conform_rsm_to_game(rsm)
+            depois = Path(rsm).read_bytes()
+            self.assertEqual(core.conform_rsm_to_game(rsm), [], "2a passada nao muda nada")
+            self.assertEqual(Path(rsm).read_bytes(), depois)
+
+    def test_conform_shifts_existing_loop_points(self):
+        # Um loop de verdade tem de continuar apontando para o MESMO audio depois
+        # de o frame de init ser inserido na frente.
+        with tempfile.TemporaryDirectory() as td:
+            rsm = _fake_rsm(Path(td) / "cru.rsm", loop_start=64, loop_end=160)
+            core.conform_rsm_to_game(rsm)
+            f = _rsm_fields(rsm)
+            self.assertEqual(f["loop_start"], 64 + 32)
+            self.assertEqual(f["loop_end"], 160 + 32)
+
+    def test_conform_fixes_loop_start_when_init_frame_already_there(self):
+        # Audio que ja comeca em silencio: o frame zerado existe, mas o loop
+        # apontava para dentro dele.
+        with tempfile.TemporaryDirectory() as td:
+            rsm = _fake_rsm(Path(td) / "cru.rsm", init_frame=True, loop_start=0)
+            mudou = core.conform_rsm_to_game(rsm)
+            self.assertEqual(_rsm_fields(rsm)["loop_start"], 32)
+            self.assertIn("loop start", mudou)
+
+    def test_conform_handles_mono(self):
+        with tempfile.TemporaryDirectory() as td:
+            rsm = _fake_rsm(Path(td) / "mono.rsm", channels=1)
+            core.conform_rsm_to_game(rsm)
+            f = _rsm_fields(rsm)
+            self.assertTrue(f["init_frame"])
+            self.assertEqual(f["loop_start"], 0x10, "mono: 1 frame = 16 bytes")
+
+    def test_conform_rejects_non_rstm(self):
+        with tempfile.TemporaryDirectory() as td:
+            bad = Path(td) / "lixo.rsm"
+            bad.write_bytes(b"NOPE" + bytes(0x900))
+            with self.assertRaises(core.ToolError):
+                core.conform_rsm_to_game(bad)
+
+    def test_sample_rate_matches_the_game(self):
+        self.assertEqual(core.MUSIC_SAMPLE_RATE, 32000,
+                         "os 135 .rsm de musica do jogo sao 32000 Hz")
+
+
+@unittest.skipUnless(TOOLS_READY, "PS2 tools not available")
+class RstmPipelineProducesGameFormat(unittest.TestCase):
+    """Ponta a ponta com o ffmpeg e o rstm_build de verdade: o .rsm que sai do
+    fluxo de adicao tem de bater com o formato do jogo em todos os campos."""
+
+    def test_converted_audio_matches_game_layout(self):
+        ffmpeg = core.find_ffmpeg()
+        with tempfile.TemporaryDirectory() as td:
+            td = Path(td)
+            source = td / "tom.wav"
+            # 48 kHz mono de proposito: obriga resample + downmix no ffmpeg
+            subprocess.run(
+                [str(ffmpeg), "-y", "-f", "lavfi",
+                 "-i", "sine=frequency=440:duration=3:sample_rate=48000",
+                 "-ac", "1", str(source)],
+                capture_output=True, check=True,
+            )
+            out = core.convert_audio_to_rsm(source, td / "saida.rsm")
+            f = _rsm_fields(out)
+            self.assertEqual(f["rate"], core.MUSIC_SAMPLE_RATE)
+            self.assertEqual(f["channels"], 2)
+            self.assertEqual(f["loop_start"], 32)
+            self.assertEqual(f["loop_end"], f["size"])
+            self.assertEqual(f["field_24"], core.RSTM_NO_LOOP)
+            self.assertTrue(f["init_frame"])
+            self.assertTrue(f["size_matches_file"])
+
+
+class IsoPreflight(unittest.TestCase):
+    """Preparar projeto nao pode aceitar qualquer .iso.
+
+    Antes o inspect_iso so rodava no botao OPCIONAL "Validar ISO": dava para apontar
+    o app para outra versao do jogo, esperar a copia de ~4 GB e receber, a 91%, um
+    traceback do Python vindo de dentro do strtbl."""
+
+    def setUp(self):
+        self._inspect = core.inspect_iso
+
+    def tearDown(self):
+        core.inspect_iso = self._inspect
+
+    def _iso(self, td):
+        iso = Path(td) / "jogo.iso"
+        iso.write_bytes(b"nao importa: o inspect_iso esta simulado")
+        return iso
+
+    def test_unsupported_boot_id_is_refused_with_the_id_in_the_message(self):
+        core.inspect_iso = lambda src, log=None, progress=None: {
+            "boot_id": "SLES_531.07", "supported": False}
+        with tempfile.TemporaryDirectory() as td:
+            with self.assertRaises(core.ToolError) as ctx:
+                core.assert_supported_iso(self._iso(td))
+            self.assertIn("SLES_531.07", str(ctx.exception), "a mensagem tem de dizer o que achou")
+            self.assertIn("SLUS_213.55", str(ctx.exception), "e o que esperava")
+
+    def test_supported_boot_id_passes(self):
+        core.inspect_iso = lambda src, log=None, progress=None: {
+            "boot_id": "SLUS_213.55", "supported": True}
+        with tempfile.TemporaryDirectory() as td:
+            self.assertTrue(core.assert_supported_iso(self._iso(td))["supported"])
+
+    def test_prepare_refuses_before_touching_the_workspace(self):
+        # O ponto principal: recusar uma ISO errada NAO pode apagar a extracao que
+        # ja estava no workspace.
+        core.inspect_iso = lambda src, log=None, progress=None: {
+            "boot_id": "SLES_531.07", "supported": False}
+        with tempfile.TemporaryDirectory() as td:
+            ws = core.Workspace(Path(td))
+            ws.game_files_path.mkdir(parents=True)
+            marcador = ws.game_files_path / "SYSTEM.CNF"
+            marcador.write_text("extracao anterior", encoding="utf-8")
+            with self.assertRaises(core.ToolError):
+                core.prepare_project_from_iso(ws, self._iso(td))
+            self.assertTrue(marcador.is_file(),
+                            "a extracao anterior tem de sobreviver a uma ISO recusada")
+
+    def test_copy_skips_the_second_mount_when_already_verified(self):
+        chamadas = []
+        core.inspect_iso = lambda src, log=None, progress=None: (
+            chamadas.append(1), {"boot_id": "SLUS_213.55", "supported": True})[1]
+        montou = []
+        orig_mount, orig_dis = core._mount_iso_drive, core._dismount_iso
+        core._mount_iso_drive = lambda src, log=None: (montou.append(1), Path(src).parent)[1]
+        core._dismount_iso = lambda src, log=None: None
+        try:
+            with tempfile.TemporaryDirectory() as td:
+                ws = core.Workspace(Path(td) / "ws")
+                core.copy_iso_to_game_files(ws, self._iso(td), verify=False)
+        finally:
+            core._mount_iso_drive, core._dismount_iso = orig_mount, orig_dis
+        self.assertEqual(chamadas, [], "verify=False nao pode montar a imagem de novo")
 
 
 if __name__ == "__main__":

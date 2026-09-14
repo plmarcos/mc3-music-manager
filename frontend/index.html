@@ -429,19 +429,26 @@
             <span class="tag" id="settings-tag">preferências</span>
           </div>
           <p class="muted">
-            Idioma, ferramentas do PC e os padrões do fluxo de edição. As escolhas
-            ficam <b>salvas</b> e voltam na próxima vez que você abrir o app.
+            Ferramentas do PC e os padrões do fluxo de edição. As escolhas ficam
+            <b>salvas</b> e voltam na próxima vez que você abrir o app.
           </p>
 
-          <div class="ov-section-title" data-i18n="settings.language">Idioma</div>
-          <div class="row">
-            <label class="field field-inline"><span data-i18n="settings.lang_label">Idioma da interface</span>
-              <select id="settings-language">
-                <option value="pt-BR">Português (Brasil)</option>
-                <option value="en">English</option>
-                <option value="es">Español</option>
-              </select>
-            </label>
+          <!-- Troca de idioma OCULTA até a tradução ficar pronta. Quem liga/desliga
+               é I18N_ENABLED em js/app.js (fonte única) — o app.js marca/desmarca o
+               `hidden` daqui no boot. Não apague este bloco: as tabelas, o
+               get_i18n/set_language e os data-i18n continuam funcionando; falta só
+               traduzir o resto das strings. -->
+          <div id="settings-language-block" hidden>
+            <div class="ov-section-title" data-i18n="settings.language">Idioma</div>
+            <div class="row">
+              <label class="field field-inline"><span data-i18n="settings.lang_label">Idioma da interface</span>
+                <select id="settings-language">
+                  <option value="pt-BR">Português (Brasil)</option>
+                  <option value="en">English</option>
+                  <option value="es">Español</option>
+                </select>
+              </label>
+            </div>
           </div>
 
           <div class="ov-section-title" data-i18n="settings.tools">Ferramentas do PC</div>

@@ -10,7 +10,10 @@ First ported capability: audio -> RSM conversion (safe, non-destructive), which
 mirrors the proven pipeline from the original _convert_to_rsm:
   .rsm         -> copied as-is
   .ads / .ss2  -> straight to rstm_build (already PS2 audio)
-  everything else (.wav/.mp3/...) -> ffmpeg normalize (44100/stereo/s16) -> rstm_build
+  everything else (.wav/.mp3/...) -> ffmpeg normalize (32000/stereo/s16) -> rstm_build
+Todo .rsm produzido passa por conform_rsm_to_game(), que acerta o que o rstm_build
+deixa fora do padrao do jogo (ver o comentario da funcao) -- sem isso a faixa fica
+MUDA no MC3.
 The ffmpeg normalize step is what fixed the "ps2str exit -1" on some WAV headers.
 """
 
@@ -257,6 +260,7 @@ def convert_audio_to_rsm(
     if suffix == ".rsm":
         _make_writable(output)
         shutil.copy2(source, output)
+        conform_rsm_to_game(output)  # pode vir de outra ferramenta, com o mesmo defeito
         if progress:
             progress(100, "Copiado (ja era RSM).")
         return output
@@ -301,7 +305,8 @@ def convert_audio_to_rsm(
         # branch is also what a user "Cancelar" lands on (killing the proc makes
         # _run return non-zero) — discarding it raised UnboundLocalError here.
         code, out = _run(
-            [ffmpeg, "-y", "-i", source, "-ar", "44100", "-ac", "2", "-sample_fmt", "s16", temp_wav],
+            [ffmpeg, "-y", "-i", source, "-ar", str(MUSIC_SAMPLE_RATE),
+             "-ac", "2", "-sample_fmt", "s16", temp_wav],
             log=log,
             timeout=FFMPEG_TIMEOUT,
         )
@@ -328,6 +333,75 @@ def convert_audio_to_rsm(
     return output
 
 
+# ---- conformidade do RSTM com o formato do proprio jogo ---------------------
+# Medido nos 135 .rsm de musica que vieram do jogo (STREAMS/Music), TODOS iguais:
+#   0x08 sample rate = 32000      0x1C loop start = 32 (= 1 frame estereo)
+#   0x24 = 0xFFFFFFFF             dados comecam com 1 frame ZERADO (init do SPU)
+#
+# O rstm_build gera outra coisa: 44100 (porque e o que o nosso ffmpeg pede), loop
+# start 0, 0x24 = 0 -- ele simplesmente NUNCA escreve esse campo -- e ainda REMOVE o
+# frame de init ("wipe SPU initialization frame written by PS2STR, RSMs don't have
+# these", rstm_build.py:152). Isso pode valer para o Bully; para a musica do MC3 e
+# falso, e o resultado e faixa MUDA no jogo.
+#
+# Corrigir aqui, e nao no rstm_build.py, porque find_rstm_build() da prioridade ao
+# rstm_build.EXE -- o .py nem chega a rodar.
+RSTM_MAGIC = b"RSTM"
+RSTM_HEADER_SIZE = 0x800
+RSTM_NO_LOOP = 0xFFFFFFFF
+# Taxa que o jogo usa em 100% da sua propria musica. Se um dia for provado que o
+# streamer aguenta mais, e so mexer aqui.
+MUSIC_SAMPLE_RATE = 32000
+
+
+def _u32(buf, offset: int) -> int:
+    return int.from_bytes(buf[offset:offset + 4], "little")
+
+
+def _put_u32(buf: bytearray, offset: int, value: int) -> None:
+    buf[offset:offset + 4] = int(value).to_bytes(4, "little")
+
+
+def conform_rsm_to_game(path) -> list:
+    """Ajusta um .rsm recem-gerado ao layout que o jogo usa. Devolve o que mudou.
+
+    Idempotente: rodar de novo num arquivo ja conforme nao muda nada (e util,
+    porque um .rsm de entrada pode ja estar correto)."""
+    path = Path(path)
+    raw = path.read_bytes()
+    if len(raw) <= RSTM_HEADER_SIZE or raw[:4] != RSTM_MAGIC:
+        raise ToolError(f"Arquivo RSM invalido (sem cabecalho RSTM): {path.name}")
+
+    header = bytearray(raw[:RSTM_HEADER_SIZE])
+    body = raw[RSTM_HEADER_SIZE:]
+    channels = _u32(header, 0x0C) or 2
+    frame = 0x10 * channels
+    mudou = []
+
+    if body[:frame] != bytes(frame):
+        # Devolve o frame de init que o rstm_build tirou. Os offsets de loop andam
+        # junto com ele, para continuarem apontando para o mesmo audio.
+        body = bytes(frame) + body
+        _put_u32(header, 0x1C, _u32(header, 0x1C) + frame)
+        _put_u32(header, 0x20, _u32(header, 0x20) + frame)
+        _put_u32(header, 0x18, len(body))
+        mudou.append("frame de init")
+    elif _u32(header, 0x1C) == 0:
+        # Ja havia um frame zerado (audio que comeca em silencio), mas o loop
+        # apontava para dentro dele.
+        _put_u32(header, 0x1C, frame)
+        mudou.append("loop start")
+
+    if _u32(header, 0x24) != RSTM_NO_LOOP:
+        _put_u32(header, 0x24, RSTM_NO_LOOP)
+        mudou.append("campo 0x24")
+
+    if mudou:
+        _make_writable(path)
+        path.write_bytes(bytes(header) + body)
+    return mudou
+
+
 def _publish_rsm(temp_rsm: Path, output: Path) -> None:
     """Move a freshly built .rsm from scratch into the game folder."""
     if not temp_rsm.is_file() or temp_rsm.stat().st_size == 0:
@@ -335,6 +409,7 @@ def _publish_rsm(temp_rsm: Path, output: Path) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
     _make_writable(output)  # extracted game files carry the read-only bit
     shutil.move(str(temp_rsm), str(output))
+    conform_rsm_to_game(output)
 
 
 # ---- ISO inspection (read-only) -------------------------------------------
@@ -444,6 +519,25 @@ def inspect_iso(source, log: LogFn = None, progress: ProgressFn = None) -> dict:
     finally:
         # Always release the drive, even on failure, so the ISO isn't left mounted.
         _dismount_iso(iso_path, log=log)
+
+
+def assert_supported_iso(source, log: LogFn = None) -> dict:
+    """Preflight de "Preparar projeto": recusa uma ISO que nao seja o jogo suportado.
+
+    Antes disso o `inspect_iso` so era chamado pelo botao OPCIONAL "Validar ISO", entao
+    dava para apontar o app para qualquer .iso e ele copiava ~4 GB, extraia os DATs e so
+    entao explodia la dentro do strtbl com um traceback do Python -- a 91%. Checar o
+    BOOT2 antes custa uns segundos e transforma isso numa frase que o usuario entende.
+    """
+    report = inspect_iso(source, log=log)
+    if not report.get("supported"):
+        raise ToolError(
+            f"Esta ISO nao e a versao que o app sabe editar. "
+            f"Detectado BOOT2={report.get('boot_id') or '?'}; o suportado e {SUPPORTED_GAME_NAME}. "
+            "Outras versoes/regioes do jogo tem os arquivos internos em outro formato, "
+            "e a extracao falharia no meio."
+        )
+    return report
 
 
 # ---- Workspace + DAT rebuild + backup -------------------------------------
@@ -1591,11 +1685,19 @@ def _copy_tree_with_progress(source_root, target_root, log: LogFn = None, progre
     return copied
 
 
-def copy_iso_to_game_files(ws: Workspace, iso_source, log: LogFn = None, progress: ProgressFn = None) -> int:
-    """Step 3: mount the ISO, copy all its files into 'Arquivos da ISO', dismount."""
+def copy_iso_to_game_files(ws: Workspace, iso_source, log: LogFn = None,
+                           progress: ProgressFn = None, verify: bool = True) -> int:
+    """Step 3: mount the ISO, copy all its files into 'Arquivos da ISO', dismount.
+
+    verify=False so quando quem chamou JA rodou o assert_supported_iso (evita montar
+    a imagem duas vezes)."""
     iso_source = Path(iso_source)
     if not iso_source.is_file():
         raise ToolError(f"Arquivo ISO nao encontrado: {iso_source}")
+    if verify:
+        if progress:
+            progress(1, "Conferindo a ISO...")
+        assert_supported_iso(iso_source, log=log)
     if progress:
         progress(2, "Montando a ISO...")
     mounted = _mount_iso_drive(iso_source, log=log)
@@ -1644,7 +1746,13 @@ def _prepare_strings_workspace(ws: Workspace, log: LogFn = None) -> None:
         shutil.copy2(ws.root_strtbl_path, temp_strtbl)
         code, out = _run(_tool_command(strtbl, "dec", temp_strtbl), cwd=ws.base_path, log=log, input_text="y\n")
         if code != 0:
-            raise ToolError(f"Falha ao decodificar mcstrings02.strtbl.{_tool_detail(out)}")
+            raise ToolError(
+                "Falha ao decodificar mcstrings02.strtbl (a tabela de textos do jogo). "
+                f"O arquivo extraido tem {ws.root_strtbl_path.stat().st_size if ws.root_strtbl_path.is_file() else 0} bytes. "
+                "Isso costuma significar que a ISO nao e a versao suportada "
+                f"({SUPPORTED_GAME_NAME}) ou que a extracao saiu incompleta (disco cheio "
+                "ou antivirus). Use o botao de relatorio de erro para enviar o diagnostico."
+                + _tool_detail(out))
         json_text = (temp_dir / "mcstrings02.json").read_text(encoding="utf-8")
     _make_writable(ws.strings_json_path)
     ws.strings_json_path.write_text(json_text, encoding="utf-8")
@@ -1729,9 +1837,15 @@ def prepare_project_from_iso(ws: Workspace, iso_source, log: LogFn = None, progr
             return None
         return lambda pct, text: progress(low + (high - low) * pct / 100.0, text)
 
+    # Confere ANTES de apagar o workspace atual: recusar uma ISO errada nao pode
+    # custar a extracao que ja estava la.
+    if progress:
+        progress(1, "Conferindo a ISO...")
+    assert_supported_iso(iso_source, log=log)
+
     if ws.game_files_path.exists():
         _rmtree(ws.game_files_path)  # fresh import
-    count = copy_iso_to_game_files(ws, iso_source, log=log, progress=_sub(2, 48))
+    count = copy_iso_to_game_files(ws, iso_source, log=log, progress=_sub(2, 48), verify=False)
     if log:
         log(f"ISO copiada ({count} arquivo(s)). Descompilando o workspace...")
     result = decompile_workspace(ws, force_refresh=True, log=log, progress=_sub(48, 100))

@@ -802,6 +802,23 @@ class Api:
             # full report keeps the resolved path; compact (mailto) drops it to fit.
             out.append(f"  {name:12} {'OK' if found else 'FALTA'}" + (f"  {found}" if (full and found) else ""))
 
+        # A ISO e o dado que mais falta num relatorio remoto: quase toda falha de
+        # "Preparar projeto" e "a ISO nao e a versao suportada".
+        out += ["", "-- iso --"]
+        iso = self._selected_iso
+        if iso:
+            try:
+                info = Path(iso)
+                out.append(f"  arquivo: {info.name} ({info.stat().st_size / 1e9:.2f} GB)"
+                           if info.is_file() else f"  arquivo: {info.name} (NAO EXISTE MAIS)")
+                if full:
+                    out.append(f"  caminho: {iso}")
+            except OSError as exc:
+                out.append(f"  (falha ao ler a ISO: {exc})")
+        else:
+            out.append("  (nenhuma ISO selecionada)")
+        out.append(f"  suportada pelo app: {core.SUPPORTED_GAME_NAME}")
+
         out += ["", "-- workspace --"]
         try:
             st = core.workspace_status(ws)

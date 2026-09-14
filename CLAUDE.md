@@ -131,8 +131,16 @@ Um "walking skeleton" + o **primeiro recurso real** funcionando ponta a ponta:
   - **Multi-idioma pt/en/es:** `frontend/locales/{pt,en,es}.json` (chaves estáveis; pt=fonte);
     `core.load_translations` + `Api.get_i18n`/`set_language` (persiste em options, `self._i18n` seria
     privado); `app.js` `I18N`/`t(key)`/`applyStaticTranslations()` via `data-i18n`; seletor em
-    Configurações troca **ao vivo** (rail + títulos de card + rótulos das Configurações). ⚠️ i18n é
-    incremental: DOM estático (chrome) traduzido; **strings dinâmicas do JS ainda em pt** (cauda longa).
+    Configurações troca **ao vivo** (rail + títulos de card + rótulos das Configurações).
+    🔒 **O SELETOR ESTÁ OCULTO** — decisão do dono: não expor a troca de idioma enquanto a
+    tradução não acabar. As tabelas cobrem **20 chaves** (trilho + rótulos de Configurações);
+    todo o resto — status, erros, botões dentro dos cards e **todas** as mensagens do Python —
+    é PT-BR fixo no código, então escolher "English" entregava um app ~95% em português.
+    Liga/desliga por **`I18N_ENABLED` em `frontend/js/app.js`** (fonte única: ele revela o
+    `#settings-language-block` e volta a respeitar o idioma salvo). Enquanto `false`, a tela
+    renderiza sempre em pt-BR e a preferência salva em `options.json` fica **intacta**, para
+    ninguém que já tivesse escolhido "English" ficar preso numa tela meio traduzida.
+    A maquinaria inteira segue no lugar e testada — falta só traduzir a cauda longa.
 - **Fase 4 — EMPACOTADO (PyInstaller + Inno) ✅**: `packaging/mc3.spec` (**onedir**, não onefile —
   tools/ tem 115 MB e o onefile re-extrairia tudo pro temp a cada abertura) + `packaging/mc3.iss`
   → `build_out/installer/MC3_Music_Manager_Setup.exe` (**90 MB**; instalado = 241 MB).
@@ -251,6 +259,63 @@ Ambiente confirmado: **Python 3.14.4**, **pywebview 6.2.1**, `pythonw` no PATH =
 - **Manutenção dupla:** enquanto porta, o app Tkinter original segue sendo mantido.
 
 ## 🐛 Gotchas técnicos já descobertos
+
+- **"Falha ao decodificar mcstrings02.strtbl" — preparar NÃO validava a ISO.** Relatado
+  por um usuário do app instalado: `strtbl.py:198 read_str / AssertionError: String does
+  not match its expected size`, a 91% do "Preparar tudo automaticamente".
+  O `inspect_iso()` só era chamado pelo botão **opcional** "🔍 Validar ISO" — nada no
+  caminho de preparação conferia o BOOT2. Dava para apontar o app para qualquer `.iso`,
+  esperar a cópia de ~4 GB e receber um traceback do Python vindo de dentro da ferramenta.
+
+  Assinaturas medidas (reproduzindo corrupções contra o `.strtbl` bom):
+
+  | corrupção | onde quebra |
+  |---|---|
+  | truncado | `parse_strtbl:220` — *"Not a valid .STRTBL container"* |
+  | caractere fora do BMP (emoji) no texto | `determine_hash:134` — *"Failed to determine the hash algorithm"* |
+  | **bytes corrompidos no meio** | **`read_str:198` — *"String does not match its expected size"*** ← a do relato |
+
+  Ou seja: **não** era truncamento nem emoji. O container é válido e as labels leem; o
+  que não bate são os tamanhos das strings — compatível com **outra versão/região do
+  jogo** (layout diferente da tabela) ou extração corrompida.
+
+  **Corrigido**: `core.assert_supported_iso()` roda ANTES de qualquer cópia, em
+  `prepare_project_from_iso` e `copy_iso_to_game_files` (com `verify=False` na chamada
+  interna, para não montar a imagem duas vezes). Recusa **antes** de apagar a extração
+  atual, e a mensagem diz o BOOT2 encontrado e o esperado. O relatório de erro passou a
+  incluir a ISO — era o dado que mais faltava num relato remoto.
+
+  ⚠️ **A causa raiz do relato original segue não confirmada** — sem acesso à máquina nem
+  à ISO daquele usuário. O que foi fechado é a lacuna que deixava isso acontecer sem
+  diagnóstico. Se reaparecer: peça o relatório de erro, que agora traz a ISO e o BOOT2.
+
+- **🔇 MÚSICA MUDA NO JOGO — o `rstm_build` não entrega o formato do MC3.** Comparando
+  os **135** `.rsm` de música que vieram do jogo com os gerados pelo app, a divisão foi
+  limpa (135 × 11) em **quatro** campos:
+
+  | | jogo (135/135) | rstm_build (11/11) |
+  |---|---|---|
+  | `0x08` sample rate | **32000** | 44100 |
+  | `0x1C` loop start | **32** | 0 |
+  | `0x24` | **0xFFFFFFFF** | 0 |
+  | 1º frame dos dados | **zerado (init do SPU)** | removido |
+
+  O `0x24` o `rstm_build` **nunca escreve** — não há uma linha sequer que toque nesse
+  offset. O frame de init ele remove de propósito (`rstm_build.py:152`, *"RSMs don't
+  have these"*): pode valer para o Bully, é falso para a música do MC3. O 44100 vinha
+  do **nosso** `ffmpeg -ar`, não da ferramenta.
+
+  **Corrigido em `core.conform_rsm_to_game()`**, chamada por `_publish_rsm` (e também
+  no ramo que só copia um `.rsm`). Idempotente. A taxa virou `core.MUSIC_SAMPLE_RATE`.
+
+  ⚠️ **Corrigir dentro do `rstm_build.py` não teria efeito nenhum**: `find_rstm_build()`
+  dá prioridade ao `rstm_build.EXE`, que existe em `tools/wav to rsm/` — o `.py` nem roda.
+  Qualquer conserto no pipeline de áudio tem de ser **pós-processamento no core**, ou
+  então recompilar o `.exe`.
+
+  ⚠️ Faixas adicionadas ANTES desta correção continuam quebradas: a conformidade não
+  reamostra, então elas precisam ser **removidas e adicionadas de novo** a partir do
+  áudio original.
 
 - **`_run` devolve `(code, out)` — nunca descarte o `out`.** O ramo do ffmpeg fazia
   `code, _ = _run(...)` e logo abaixo usava `_tool_detail(out)`: `UnboundLocalError` em vez

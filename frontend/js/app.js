@@ -31,6 +31,18 @@ function escapeHtml(text) {
 // so any element without a translation simply keeps its original text.
 let I18N = { language: "pt-BR", tables: {}, dict: {} };
 
+// A troca de idioma está DESLIGADA até a tradução ficar pronta.
+// Hoje as tabelas cobrem 21 chaves (o trilho de navegação e os rótulos de
+// Configurações). Todo o resto — status, erros, botões dentro dos cards e TODAS
+// as mensagens vindas do Python — é PT-BR fixo no código, então escolher
+// "English" entregava um app ~95% em português, sem jeito óbvio de voltar.
+//
+// Para religar: ponha true aqui. Isto sozinho revela o bloco em Configurações e
+// volta a respeitar o idioma salvo — nada mais precisa mudar. A maquinaria toda
+// (get_i18n/set_language, frontend/locales/*.json, os atributos data-i18n)
+// continua no lugar e funcionando.
+const I18N_ENABLED = false;
+
 function t(key) {
   return (I18N.dict && I18N.dict[key]) || key;
 }
@@ -53,8 +65,15 @@ function applyStaticTranslations() {
 }
 
 async function loadI18n() {
+  const block = $("settings-language-block");
+  if (block) block.hidden = !I18N_ENABLED;
   try {
-    setLanguageTables(await window.pywebview.api.get_i18n());
+    const cfg = await window.pywebview.api.get_i18n();
+    // Enquanto desligado, renderiza sempre em PT-BR — assim ninguém que já tinha
+    // escolhido "English" fica preso numa tela meio traduzida agora que o seletor
+    // sumiu. A preferência salva NÃO é apagada: segue em options.json e volta a
+    // valer sozinha quando I18N_ENABLED virar true.
+    setLanguageTables(I18N_ENABLED ? cfg : Object.assign({}, cfg, { language: "pt-BR" }));
     applyStaticTranslations();
     const sel = $("settings-language");
     if (sel) sel.value = I18N.language;
