@@ -185,6 +185,21 @@ Um "walking skeleton" + o **primeiro recurso real** funcionando ponta a ponta:
   (2) restaurado o fallback `.wav`-sem-ffmpeg → rstm direto; (3) `_make_writable()` limpa o
   bit somente-leitura antes de sobrescrever `.rsm`/`.play`/`.strtbl`/`.DAT` e no restore.
 
+## 📍 Onde o app está instalado (uso real)
+
+**`F:\MC3 Music Manager\`** — o executável, a `_internal` **e o workspace do dono** (extração,
+`backups/`, as músicas adicionadas). Foi movido para cá de `build_out\dist\` em 2026-09-17,
+conferido arquivo a arquivo (17.649 arquivos; SHA-256 dos 27 insubstituíveis).
+
+**Para atualizar esse app com um build novo**, troque só o programa — NUNCA a pasta inteira:
+1. gere o build normalmente (`build_out\dist\MC3 Music Manager\`);
+2. copie o `MC3 Music Manager.exe` e espelhe a `_internal\` para `F:\MC3 Music Manager\`;
+3. `ASSETS/`, `STREAMS/`, `Arquivos da ISO/`, `backups/`, os DATs, `mcstrings02.*` e
+   `options.json` ficam como estão.
+
+`build_out\dist\` volta a ser só artefato de build. Não use o app de lá para trabalho real
+(o `mc3.spec` recusa rebuild se encontrar dados de usuário ali).
+
 ## 🌐 Internacionalização (i18n)
 
 **Idiomas:** pt-BR (fonte) + **en, es, fr, de, it, ja** — exatamente os 6 da tabela de textos do
@@ -511,10 +526,11 @@ Ver **`ROADMAP.md`** (fonte da verdade). Resumo:
 
 ## 🔗 Projeto original (referência para portar a lógica)
 
-- Local: `MC3 MUSIC TUT\mc3_music_manager.py`, ao lado desta pasta.
-  ⚠️ O caminho `F:\Importantes\...` que este arquivo citava **nao existe mais** — a
-  arvore migrou de `F:` para `E:`. Confira onde o original esta antes de consultar.
-  (god-class Tkinter ~9600 linhas; a lógica a portar vive nos métodos `_impl`/worker
+- Local encontrado (2026-09): **`F:\MC3 MUSIC TUT\mc3_music_manager.py`** — Tkinter,
+  **5.070 linhas, datado de abril/2026**. ⚠️ Este arquivo descrevia o original com ~9.600
+  linhas, então essa cópia pode ser **mais antiga** que a usada no porte: confira antes de
+  tomar como referência. (O caminho `F:\Importantes\...` citado antes não existe.)
+  (a lógica a portar vive nos métodos `_impl`/worker
   que recebem dados puros e levantam `RuntimeError` — ex.: `_convert_to_rsm`,
   `_apply_add_specs`, `_rebuild_*_dat_impl`, `_mount_iso_drive`, backup helpers).
 - As 4 ferramentas PS2 (`dave.py`, `hash_build.py`, `strtbl.py`, `wav to rsm/rstm_build.py`)
