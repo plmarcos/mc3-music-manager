@@ -51,6 +51,14 @@ def _webview_version() -> str:
         return "6.x"
 
 
+AUDIO_PATTERN = "*.wav;*.mp3;*.flac;*.ogg;*.m4a;*.aac;*.wma;*.ads;*.ss2;*.rsm"
+
+
+def _file_types(label_key: str, pattern: str) -> tuple:
+    """Filtros do dialogo "Abrir arquivo" do Windows, no idioma da interface."""
+    return (f"{core.tr(label_key)} ({pattern})", f"{core.tr('dialog.all_files')} (*.*)")
+
+
 class Api:
     def __init__(self, bridge: Bridge) -> None:
         self._bridge = bridge
@@ -72,6 +80,9 @@ class Api:
         # js_api introspection would recurse; see CLAUDE.md). Seed the last ISO /
         # output path only if they still exist on disk (mirrors the original).
         self._options = core.load_options(self._workspace)
+        # Idioma salvo, ou o do Windows na primeira execucao. NAO grava o detectado:
+        # assim ele continua acompanhando o sistema ate o usuario escolher um.
+        core.set_language(core.resolve_language(self._options.get("language")))
         _last_iso = self._options.get("last_iso") or ""
         if _last_iso and Path(_last_iso).is_file():
             self._selected_iso = _last_iso
@@ -110,7 +121,7 @@ class Api:
         o trabalho por etapas, entao falhar no meio deixa estado parcial e o
         usuario precisa saber que da para desfazer (Recompilar & Backup ->
         Restaurar). Vale igual para o cancelamento: cancelar tambem para no meio."""
-        payload = ({"ok": False, "cancelled": True, "error": "Operacao cancelada pelo usuario."}
+        payload = ({"ok": False, "cancelled": True, "error": core.tr("err.cancelled")}
                    if self._cancel_requested else {"ok": False, "error": str(exc)})
         backup = getattr(exc, core.BACKUP_ATTR, None)
         if backup:
@@ -194,13 +205,17 @@ class Api:
     def get_i18n(self) -> dict:
         """Current language + all translation tables (the frontend can't fetch()
         the JSON directly under file://, so Python serves it)."""
-        return {"language": self._options.get("language", "pt-BR"),
+        return {"language": core.get_language(),
+                "languages": list(core.LANGUAGES),
+                "source": core.SOURCE_LANGUAGE,
+                "fallback": core.FALLBACK_LANGUAGE,
                 "translations": core.load_translations()}
 
     def set_language(self, lang: str) -> dict:
         if lang in core.LANGUAGES:
             self._options["language"] = lang
             core.save_options(self._workspace, self._options)
+            core.set_language(lang)   # as proximas mensagens do backend ja saem nele
             return {"ok": True, "language": lang}
         return {"ok": False, "reason": "unknown-language"}
 
@@ -216,7 +231,7 @@ class Api:
             os.startfile(target)  # noqa: S606 - intentional native handoff
             return {"ok": True}
         except OSError as exc:
-            self._bridge.emit("add_log", {"line": f"Nao foi possivel abrir o player: {exc}"})
+            self._bridge.emit("add_log", {"line": core.tr("log.player_failed", error=exc)})
             return {"ok": False, "reason": str(exc)}
 
     # ---- validate ISO (part of Preparar Projeto) ---------------------------
@@ -229,10 +244,10 @@ class Api:
         source = self._selected_iso
         if not source or not Path(source).is_file():
             self._release_busy()
-            self._bridge.emit("pp_log", {"line": "Escolha uma ISO válida primeiro."})
+            self._bridge.emit("pp_log", {"line": core.tr("log.pick_iso_first")})
             return {"ok": False, "reason": "no-iso"}
         self._bridge.emit("pp_busy", {"busy": True})
-        self._bridge.emit("pp_status", {"text": "Validando a ISO...", "progress": 0})
+        self._bridge.emit("pp_status", {"text": core.tr("progress.validating_iso"), "progress": 0})
         run_in_background(
             "validate_iso",
             lambda: core.inspect_iso(
@@ -252,7 +267,7 @@ class Api:
 
     def _validate_error(self, exc: BaseException) -> None:
         self._release_busy()
-        self._bridge.emit("pp_log", {"line": f"ERRO: {exc}"})
+        self._bridge.emit("pp_log", {"line": core.tr("log.error", error=exc)})
         self._bridge.emit("pp_busy", {"busy": False})
         self._bridge.emit("pp_validation", {"error": str(exc)})
 
@@ -290,13 +305,13 @@ class Api:
         return self._start_rebuild("ASSETS.DAT", core.rebuild_assets_dat)
 
     def rebuild_all_dats(self) -> dict:
-        return self._start_rebuild("todos os DATs", core.rebuild_all)
+        return self._start_rebuild(core.tr("kind.rebuild_all"), core.rebuild_all)
 
     def _start_rebuild(self, kind: str, fn) -> dict:
         if not self._acquire_busy():
             return {"ok": False, "reason": "busy"}
         self._bridge.emit("rb_busy", {"busy": True})
-        self._bridge.emit("rb_status", {"text": f"Iniciando: {kind}...", "progress": 0})
+        self._bridge.emit("rb_status", {"text": core.tr("progress.starting", kind=kind), "progress": 0})
         run_in_background(
             f"rebuild_{kind}",
             lambda: fn(
@@ -316,7 +331,7 @@ class Api:
 
     def _rebuild_error(self, exc: BaseException) -> None:
         self._release_busy()
-        self._bridge.emit("rb_log", {"line": f"ERRO: {exc}"})
+        self._bridge.emit("rb_log", {"line": core.tr("log.error", error=exc)})
         self._bridge.emit("rb_busy", {"busy": False})
         self._bridge.emit("rb_done", self._error_payload(exc))
 
@@ -340,7 +355,7 @@ class Api:
         ws = self._workspace
         log = lambda line: self._bridge.emit("bk_log", {"line": line})
         backup_dir = core.create_backup_session(ws, "manual")
-        log(f"Backup criado: {backup_dir}")
+        log(core.tr("log.backup_created", path=backup_dir))
         targets = [
             ws.root_strtbl_path,
             ws.strtbl_path,
@@ -351,14 +366,14 @@ class Api:
         if ws.playlists_root.is_dir():
             targets += sorted(ws.playlists_root.rglob("*.play"))
         saved = core.backup_files(ws, targets, backup_dir)
-        log(f"{saved} arquivo(s) copiados para o backup.")
+        log(core.tr("log.backup_copied", n=saved))
         return {"backup": str(backup_dir), "count": saved}
 
     def _restore_worker(self) -> dict:
         ws = self._workspace
         latest = core.latest_backup_dir(ws)
         if latest is None:
-            raise core.ToolError("Nenhum backup encontrado para restaurar.")
+            raise core.ToolError(core.tr("err.no_backup"))
         return core.restore_backup(ws, latest, log=lambda line: self._bridge.emit("bk_log", {"line": line}))
 
     def _backup_done(self, result: object) -> None:
@@ -373,7 +388,7 @@ class Api:
 
     def _backup_error(self, exc: BaseException) -> None:
         self._release_busy()
-        self._bridge.emit("bk_log", {"line": f"ERRO: {exc}"})
+        self._bridge.emit("bk_log", {"line": core.tr("log.error", error=exc)})
         self._bridge.emit("bk_busy", {"busy": False})
         self._bridge.emit("bk_done", {"ok": False, "error": str(exc)})
 
@@ -416,7 +431,7 @@ class Api:
         window = self._bridge.window
         if window is None:
             return {"path": None}
-        file_types = ("Áudio (*.wav;*.mp3;*.flac;*.ogg;*.m4a;*.aac;*.wma;*.ads;*.ss2;*.rsm)", "Todos os arquivos (*.*)")
+        file_types = _file_types("dialog.audio_files", AUDIO_PATTERN)
         result = window.create_file_dialog(webview.OPEN_DIALOG, allow_multiple=False, file_types=file_types)
         path = result[0] if result else None
         self._add_source = path
@@ -429,7 +444,7 @@ class Api:
                 "add_guess",
                 lambda: core.source_guess(path, log=lambda line: self._bridge.emit("add_log", {"line": line})),
                 on_done=lambda g: self._emit_guess(seq, g),
-                on_error=lambda exc: self._bridge.emit("add_log", {"line": f"Aviso na deteccao: {exc}"}),
+                on_error=lambda exc: self._bridge.emit("add_log", {"line": core.tr("log.guess_warning", error=exc)}),
             )
         return {"path": path}
 
@@ -441,7 +456,7 @@ class Api:
 
     def preview_add(self, title: str, artist: str, genre: str, asset_name: str) -> dict:
         if not self._add_source:
-            return {"ok": False, "error": "Escolha um arquivo de áudio primeiro."}
+            return {"ok": False, "error": core.tr("add.pick_audio_first")}
         try:
             spec = core.build_add_spec(self._workspace, self._add_source, title, artist, genre, asset_name)
         except core.ToolError as exc:
@@ -461,10 +476,10 @@ class Api:
         source = self._add_source
         if not source or not Path(source).is_file():
             self._release_busy()
-            self._bridge.emit("add_log", {"line": "Nenhum arquivo de áudio selecionado."})
+            self._bridge.emit("add_log", {"line": core.tr("log.no_audio_selected")})
             return {"ok": False, "reason": "no-file"}
         self._bridge.emit("add_busy", {"busy": True})
-        self._bridge.emit("add_status", {"text": "Iniciando adição...", "progress": 0})
+        self._bridge.emit("add_status", {"text": core.tr("progress.starting_add"), "progress": 0})
         run_in_background("add_song", lambda: self._add_worker(source, payload or {}),
                           on_done=self._add_done, on_error=self._add_error)
         return {"ok": True}
@@ -481,7 +496,7 @@ class Api:
         # resolve_playlist prende o caminho dentro de ASSETS/ e exige .play
         selected = [core.resolve_playlist(ws, rel) for rel in rels]
         if not selected:
-            raise core.ToolError("Selecione ao menos uma playlist de destino.")
+            raise core.ToolError(core.tr("err.pick_playlist"))
         # Expand city picks with the genre's race playlist (mirrors the original;
         # without this the song never lands in the race lists = invisible in game).
         spec["playlist_targets"] = core.playlist_targets_for_genre(selected, spec["genre"]) or selected
@@ -495,7 +510,7 @@ class Api:
 
     def _add_error(self, exc: BaseException) -> None:
         self._release_busy()
-        self._bridge.emit("add_log", {"line": f"ERRO: {exc}"})
+        self._bridge.emit("add_log", {"line": core.tr("log.error", error=exc)})
         self._bridge.emit("add_busy", {"busy": False})
         self._bridge.emit("add_done", self._error_payload(exc))
 
@@ -507,17 +522,17 @@ class Api:
         window = self._bridge.window
         if window is None:
             return {"count": 0}
-        file_types = ("Áudio (*.wav;*.mp3;*.flac;*.ogg;*.m4a;*.aac;*.wma;*.ads;*.ss2;*.rsm)", "Todos os arquivos (*.*)")
+        file_types = _file_types("dialog.audio_files", AUDIO_PATTERN)
         result = window.create_file_dialog(webview.OPEN_DIALOG, allow_multiple=True, file_types=file_types)
         paths = list(result) if result else []
         self._batch_sources = paths
         if paths:
-            self._bridge.emit("add_log", {"line": f"Lendo tags de {len(paths)} arquivo(s)..."})
+            self._bridge.emit("add_log", {"line": core.tr("log.reading_tags", n=len(paths))})
             run_in_background(
                 "batch_guess",
                 lambda: self._batch_guess_worker(paths),
                 on_done=lambda rows: self._bridge.emit("batch_loaded", {"rows": rows if isinstance(rows, list) else []}),
-                on_error=lambda exc: self._bridge.emit("add_log", {"line": f"Aviso na deteccao: {exc}"}),
+                on_error=lambda exc: self._bridge.emit("add_log", {"line": core.tr("log.guess_warning", error=exc)}),
             )
         return {"count": len(paths)}
 
@@ -541,10 +556,10 @@ class Api:
         rows = (payload or {}).get("rows") or []
         if not rows:
             self._release_busy()
-            self._bridge.emit("add_log", {"line": "Nenhuma faixa no lote."})
+            self._bridge.emit("add_log", {"line": core.tr("log.batch_empty")})
             return {"ok": False, "reason": "empty"}
         self._bridge.emit("add_busy", {"busy": True})
-        self._bridge.emit("add_status", {"text": "Iniciando lote...", "progress": 0})
+        self._bridge.emit("add_status", {"text": core.tr("progress.starting_batch"), "progress": 0})
         # Congela as origens sob o busy-lock: o picker nao pode trocar o mapeamento
         # indice -> caminho enquanto o worker o percorre.
         sources = list(self._batch_sources)
@@ -559,7 +574,7 @@ class Api:
         rels = payload.get("playlists") or []
         selected = [core.resolve_playlist(ws, rel) for rel in rels]
         if not selected:
-            raise core.ToolError("Selecione ao menos uma playlist de destino.")
+            raise core.ToolError(core.tr("err.pick_playlist"))
 
         specs = []
         skipped = []
@@ -580,13 +595,13 @@ class Api:
             # a track with no compatible playlist is skipped, like the original).
             targets = core.playlist_targets_for_genre(selected, spec["genre"])
             if not targets:
-                skipped.append(f"{Path(source).name}: (nenhuma playlist compativel com o genero {spec['genre']})")
+                skipped.append(core.tr("err.no_compatible_playlist", name=Path(source).name, genre=spec["genre"]))
                 continue
             spec["playlist_targets"] = targets
             specs.append(spec)
 
         if not specs:
-            raise core.ToolError("Nenhuma faixa valida no lote. " + ("; ".join(skipped) if skipped else ""))
+            raise core.ToolError(core.tr("err.no_valid_batch", detail="; ".join(skipped)))
         result = core.add_songs(ws, specs, allow_overwrite=bool(payload.get("allow_overwrite")),
                                 backup_label="add_music_batch", log=log, progress=progress)
         result["skipped"] = skipped
@@ -608,10 +623,10 @@ class Api:
         songs = (payload or {}).get("songs") or []
         if not songs:
             self._release_busy()
-            self._bridge.emit("rm_log", {"line": "Nenhuma música selecionada."})
+            self._bridge.emit("rm_log", {"line": core.tr("log.no_song_selected")})
             return {"ok": False, "reason": "empty"}
         self._bridge.emit("rm_busy", {"busy": True})
-        self._bridge.emit("rm_status", {"text": "Iniciando remoção...", "progress": 0})
+        self._bridge.emit("rm_status", {"text": core.tr("progress.starting_remove"), "progress": 0})
         run_in_background("remove_songs", lambda: self._remove_worker(payload or {}),
                           on_done=self._remove_done, on_error=self._remove_error)
         return {"ok": True}
@@ -645,7 +660,7 @@ class Api:
 
     def _remove_error(self, exc: BaseException) -> None:
         self._release_busy()
-        self._bridge.emit("rm_log", {"line": f"ERRO: {exc}"})
+        self._bridge.emit("rm_log", {"line": core.tr("log.error", error=exc)})
         self._bridge.emit("rm_busy", {"busy": False})
         self._bridge.emit("rm_done", self._error_payload(exc))
 
@@ -660,7 +675,7 @@ class Api:
         window = self._bridge.window
         if window is None:
             return {"path": None}
-        file_types = ("Imagem de disco (*.iso)", "Todos os arquivos (*.*)")
+        file_types = _file_types("dialog.disc_image", "*.iso")
         result = window.create_file_dialog(webview.SAVE_DIALOG, save_filename="MC3_mod.iso", file_types=file_types)
         path = result if isinstance(result, str) else (result[0] if result else None)
         if path:
@@ -678,7 +693,7 @@ class Api:
         output = self._iso_output or str(self._workspace.base_path / "ISO" / "MC3_mod.iso")
         label = (payload or {}).get("volume_label") or "MClub"
         self._bridge.emit("gi_busy", {"busy": True})
-        self._bridge.emit("gi_status", {"text": "Iniciando geração da ISO final...", "progress": 0})
+        self._bridge.emit("gi_status", {"text": core.tr("progress.starting_iso"), "progress": 0})
         run_in_background("generate_iso", lambda: self._generate_worker(output, label),
                           on_done=self._generate_done, on_error=self._generate_error)
         return {"ok": True}
@@ -699,7 +714,7 @@ class Api:
 
     def _generate_error(self, exc: BaseException) -> None:
         self._release_busy()
-        self._bridge.emit("gi_log", {"line": f"ERRO: {exc}"})
+        self._bridge.emit("gi_log", {"line": core.tr("log.error", error=exc)})
         self._bridge.emit("gi_busy", {"busy": False})
         self._bridge.emit("gi_done", self._error_payload(exc))
 
@@ -709,7 +724,7 @@ class Api:
         if not self._acquire_busy():
             return {"ok": False, "reason": "busy"}
         self._bridge.emit("inst_busy", {"busy": True})
-        self._bridge.emit("inst_status", {"text": f"Instalando {kind}...", "progress": 0})
+        self._bridge.emit("inst_status", {"text": core.tr("progress.installing", tool=kind), "progress": 0})
         run_in_background("install_" + str(kind), lambda: self._install_worker(kind),
                           on_done=self._install_done, on_error=self._install_error)
         return {"ok": True}
@@ -728,7 +743,7 @@ class Api:
 
     def _install_error(self, exc: BaseException) -> None:
         self._release_busy()
-        self._bridge.emit("inst_log", {"line": f"ERRO: {exc}"})
+        self._bridge.emit("inst_log", {"line": core.tr("log.error", error=exc)})
         self._bridge.emit("inst_busy", {"busy": False})
         self._bridge.emit("inst_done", self._error_payload(exc))
 
@@ -782,7 +797,7 @@ class Api:
 
         out += ["", "-- ambiente --",
                 f"  app {APP_VERSION} | {platform.platform()} | "
-                f"frozen={getattr(sys, 'frozen', False)} | idioma={self._options.get('language', 'pt-BR')}"]
+                f"frozen={getattr(sys, 'frozen', False)} | idioma={core.get_language()}"]
         if full:
             out.append(f"  exe: {sys.executable}")
 
@@ -845,7 +860,7 @@ class Api:
         window = self._bridge.window
         if window is None:
             return {"path": None}
-        file_types = ("Imagem de disco PS2 (*.iso)", "Todos os arquivos (*.*)")
+        file_types = _file_types("dialog.ps2_disc_image", "*.iso")
         result = window.create_file_dialog(webview.OPEN_DIALOG, allow_multiple=False, file_types=file_types)
         path = result[0] if result else None
         self._selected_iso = path
@@ -853,26 +868,26 @@ class Api:
             self._options["last_iso"] = path
             core.save_options(self._workspace, self._options)
             self._bridge.emit("pp_iso_selected", {"path": path, "name": Path(path).name})
-            self._bridge.emit("pp_log", {"line": f"ISO selecionada: {path}"})
+            self._bridge.emit("pp_log", {"line": core.tr("log.iso_selected", path=path)})
         return {"path": path}
 
     def copy_iso_files(self) -> dict:
         return self._start_prepare(
-            "copiar arquivos da ISO",
+            core.tr("kind.copy_iso"),
             lambda ws, log, prog: core.copy_iso_to_game_files(ws, self._selected_iso, log=log, progress=prog),
             need_iso=True,
         )
 
     def prepare_files(self) -> dict:
         return self._start_prepare(
-            "preparar arquivos para editar",
+            core.tr("kind.prepare_files"),
             lambda ws, log, prog: core.decompile_workspace(ws, force_refresh=False, log=log, progress=prog),
             need_iso=False,
         )
 
     def prepare_all(self) -> dict:
         return self._start_prepare(
-            "preparar tudo automaticamente",
+            core.tr("kind.prepare_all"),
             lambda ws, log, prog: core.prepare_project_from_iso(ws, self._selected_iso, log=log, progress=prog),
             need_iso=True,
         )
@@ -882,10 +897,10 @@ class Api:
             return {"ok": False, "reason": "busy"}
         if need_iso and (not self._selected_iso or not Path(self._selected_iso).is_file()):
             self._release_busy()
-            self._bridge.emit("pp_log", {"line": "Escolha uma ISO válida primeiro."})
+            self._bridge.emit("pp_log", {"line": core.tr("log.pick_iso_first")})
             return {"ok": False, "reason": "no-iso"}
         self._bridge.emit("pp_busy", {"busy": True})
-        self._bridge.emit("pp_status", {"text": f"Iniciando: {kind}...", "progress": 0})
+        self._bridge.emit("pp_status", {"text": core.tr("progress.starting", kind=kind), "progress": 0})
         run_in_background(
             f"prepare_{kind}",
             lambda: fn(
@@ -905,7 +920,7 @@ class Api:
 
     def _prepare_error(self, exc: BaseException) -> None:
         self._release_busy()
-        self._bridge.emit("pp_log", {"line": f"ERRO: {exc}"})
+        self._bridge.emit("pp_log", {"line": core.tr("log.error", error=exc)})
         self._bridge.emit("pp_busy", {"busy": False})
         self._bridge.emit("pp_done", self._error_payload(exc))
 
@@ -918,7 +933,7 @@ class Api:
         if not self._acquire_busy():
             return {"ok": False, "reason": "busy"}
         self._bridge.emit("pp_busy", {"busy": True})
-        self._bridge.emit("pp_status", {"text": "Resetando o projeto...", "progress": 0})
+        self._bridge.emit("pp_status", {"text": core.tr("progress.resetting"), "progress": 0})
         run_in_background(
             "reset_project",
             lambda: core.reset_workspace(
@@ -939,4 +954,4 @@ class Api:
         self._options["last_iso"] = ""
         core.save_options(self._workspace, self._options)
         self._bridge.emit("pp_busy", {"busy": False})
-        self._bridge.emit("pp_done", {"ok": True, "kind": "reset", "result": self._json_safe(result)})
+        self._bridge.emit("pp_done", {"ok": True, "kind": core.tr("kind.reset"), "result": self._json_safe(result)})

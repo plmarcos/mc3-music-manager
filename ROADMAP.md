@@ -63,13 +63,10 @@ Migrar uma aba por vez, rodando em paralelo ao Tkinter até provar paridade:
 - [x] Gerar ISO **final** (ImgBurn) — **feito**: `core.generate_final_iso` (preflight ImgBurn/
       game_files/SYSTEM.CNF → `rebuild_all` → comando ImgBurn BUILD) + `find_imgburn`. Tela:
       status + escolher destino (save dialog) + rótulo do volume + gerar. **Ciclo completo!**
-- [~] Configurações + i18n (mover APP_UI_TEXT para JSON pt/en/es).
-      Configurações: **feito**. i18n: a maquinaria está pronta e testada, mas só **20 chaves**
-      estão traduzidas (trilho + rótulos de Configurações) — status, erros, botões dos cards e
-      todas as mensagens do Python continuam PT-BR fixo. Por isso o **seletor foi OCULTADO**
-      (`I18N_ENABLED = false` em `frontend/js/app.js`): melhor não oferecer do que entregar um
-      app ~95% em português. Para terminar: extrair a cauda longa de strings do `app.js` e do
-      `core.py`/`api.py` para as tabelas, depois pôr `I18N_ENABLED = true`.
+- [x] Configurações + i18n — **feito**. 7 idiomas (pt-BR + os 6 do próprio jogo: en, es, fr,
+      de, it, ja), cobrindo 100% da interface E das mensagens do Python (~380 chaves). Troca ao
+      vivo, idioma do Windows na primeira execução, testes de integridade dos catálogos.
+      Pendente: revisão das traduções por falantes nativos.
 
 - [x] **Início (painel + passo a passo)** — **feito**: `core.overview` agrega programas
       (ffmpeg/ImgBurn/PS2 tools/foobar), contagem de músicas/playlists, backup e os 5 passos
@@ -81,7 +78,7 @@ Migrar uma aba por vez, rodando em paralelo ao Tkinter até provar paridade:
 de verdade, não só com os testes. Os "falta real-run" acima estão desatualizados.
 
 **A Fase 3 está fechada — o app faz o loop inteiro** (Início guia: Preparar → Adicionar/Remover
-→ Recompilar → Gerar ISO). Falta só: terminar o i18n (o seletor está oculto até lá);
+→ Recompilar → Gerar ISO). O i18n está completo (7 idiomas);
 e a Fase 4 (empacotar PyInstaller + Inno). 51/51 testes.
 
 ## Fase 4 — Empacotar  ✅ FEITA
@@ -107,7 +104,8 @@ ISCC.exe packaging\mc3.iss      # Inno Setup 6 — precisa estar instalado
       SPU) — medido contra os 135 `.rsm` de música do próprio jogo. `core.conform_rsm_to_game()`
       acerta todos; a taxa virou `core.MUSIC_SAMPLE_RATE = 32000`. Detalhes no CLAUDE.md.
       Testado: o pipeline real (ffmpeg + rstm_build.exe) agora bate com o jogo em
-      **todos** os invariantes. **Falta a confirmação de som no jogo de verdade.**
+      **todos** os invariantes. ✅ **Confirmado no jogo em 2026-09-16** — 12 faixas
+      adicionadas pelo app empacotado tocaram.
 
 ## Armadilhas a blindar (da análise cética) — NÃO esquecer
 - Ordem dos passos destrutivos: modais HTML precisam de trava anti-reentrância.

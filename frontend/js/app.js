@@ -26,60 +26,162 @@ function escapeHtml(text) {
 }
 
 // ---- i18n (interface language) --------------------------------------------
-// PT-BR is the base language; the JSON tables (served by Python, since file://
-// blocks fetch) map stable keys -> translated text. t(key) falls back to the key
-// so any element without a translation simply keeps its original text.
-let I18N = { language: "pt-BR", tables: {}, dict: {} };
-
-// A troca de idioma está DESLIGADA até a tradução ficar pronta.
-// Hoje as tabelas cobrem 21 chaves (o trilho de navegação e os rótulos de
-// Configurações). Todo o resto — status, erros, botões dentro dos cards e TODAS
-// as mensagens vindas do Python — é PT-BR fixo no código, então escolher
-// "English" entregava um app ~95% em português, sem jeito óbvio de voltar.
+// Catalogos em frontend/locales/*.json, servidos pelo Python (file:// bloqueia
+// fetch). O MESMO catalogo alimenta as mensagens do backend (core.tr), entao uma
+// chave tem um texto so, nos dois lados.
 //
-// Para religar: ponha true aqui. Isto sozinho revela o bloco em Configurações e
-// volta a respeitar o idioma salvo — nada mais precisa mudar. A maquinaria toda
-// (get_i18n/set_language, frontend/locales/*.json, os atributos data-i18n)
-// continua no lugar e funcionando.
-const I18N_ENABLED = false;
+// Regras que fazem a troca de idioma funcionar AO VIVO, inclusive em textos que
+// ja mudaram desde o boot:
+//   * setText(el, key, params) grava a chave no elemento (data-i18n +
+//     data-i18n-args); applyTranslations() re-renderiza TODOS esses elementos.
+//   * setRaw(el, texto) e para dado cru (nome de arquivo, caminho): apaga a chave,
+//     para a proxima troca de idioma nao sobrescrever o dado.
+//   * Icones e simbolos (✔ ✖ 💿) ficam FORA do texto traduzido, no HTML/JS.
+//   * Frases nunca sao montadas por concatenacao: cada uma e uma chave com
+//     {parametros}, porque a ordem das palavras muda de idioma para idioma.
+let I18N = { language: "pt-BR", source: "pt-BR", fallback: "en", tables: {}, dict: {} };
 
-function t(key) {
-  return (I18N.dict && I18N.dict[key]) || key;
+function lookup(key) {
+  for (const lang of [I18N.language, I18N.fallback, I18N.source]) {
+    const table = I18N.tables[lang];
+    if (table && Object.prototype.hasOwnProperty.call(table, key)) return table[key];
+  }
+  return key;  // chave crua = traducao faltando, visivel de proposito
 }
 
-function setLanguageTables(cfg) {
-  I18N.tables = (cfg && cfg.translations) || {};
-  I18N.language = (cfg && cfg.language) || "pt-BR";
-  I18N.dict = I18N.tables[I18N.language] || {};
+// Um parametro pode ser ele mesmo uma chave -- {key: "..."} --, traduzida na hora.
+// Assim "Ocorreu um erro em: {screen}" troca de idioma inteiro, tela inclusive.
+function paramText(value) {
+  if (value && typeof value === "object" && typeof value.key === "string") {
+    return t(value.key, value.params);
+  }
+  return String(value);
 }
 
-function applyStaticTranslations() {
-  document.querySelectorAll("[data-i18n]").forEach((el) => {
-    const k = el.getAttribute("data-i18n");
-    if (k) el.textContent = t(k);
+function fill(text, params) {
+  if (!params) return text;
+  return text.replace(/\{(\w+)\}/g, (m, name) =>
+    Object.prototype.hasOwnProperty.call(params, name) ? paramText(params[name]) : m);
+}
+
+function t(key, params) {
+  return fill(lookup(key), params);
+}
+
+// Texto em PT, independente do idioma da tela: o relatorio de erro vai para o
+// desenvolvedor, que le portugues.
+function tSource(key, params) {
+  const table = I18N.tables[I18N.source] || {};
+  return fill(Object.prototype.hasOwnProperty.call(table, key) ? table[key] : key, params);
+}
+
+// **negrito** -> <b>, e so isso. Todo o resto e escapado: um catalogo nunca injeta HTML.
+function mdToHtml(text) {
+  return escapeHtml(text).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
+}
+
+function withIcon(icon, text) {
+  return icon ? icon + " " + text : text;
+}
+
+// icon (opcional): simbolo mostrado antes do texto, fora da traducao.
+function setText(el, key, params, icon) {
+  if (typeof el === "string") el = $(el);
+  if (!el) return;
+  el.setAttribute("data-i18n", key);
+  if (params) el.setAttribute("data-i18n-args", JSON.stringify(params));
+  else el.removeAttribute("data-i18n-args");
+  if (icon) el.setAttribute("data-i18n-icon", icon);
+  else el.removeAttribute("data-i18n-icon");
+  el.textContent = withIcon(icon, t(key, params));
+}
+
+function setRaw(el, text) {
+  if (typeof el === "string") el = $(el);
+  if (!el) return;
+  el.removeAttribute("data-i18n");
+  el.removeAttribute("data-i18n-args");
+  el.removeAttribute("data-i18n-icon");
+  el.textContent = text == null ? "" : String(text);
+}
+
+function argsOf(el) {
+  const raw = el.getAttribute("data-i18n-args");
+  if (!raw) return undefined;
+  try { return JSON.parse(raw); } catch (e) { return undefined; }
+}
+
+function applyTranslations(root) {
+  const scope = root || document;
+  scope.querySelectorAll("[data-i18n]").forEach((el) => {
+    el.textContent = withIcon(el.getAttribute("data-i18n-icon"),
+                              t(el.getAttribute("data-i18n"), argsOf(el)));
   });
-  document.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
-    const k = el.getAttribute("data-i18n-placeholder");
-    if (k) el.setAttribute("placeholder", t(k));
+  scope.querySelectorAll("[data-i18n-md]").forEach((el) => {
+    el.innerHTML = mdToHtml(t(el.getAttribute("data-i18n-md")));
   });
+  scope.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
+    el.setAttribute("placeholder", t(el.getAttribute("data-i18n-placeholder")));
+  });
+  scope.querySelectorAll("[data-i18n-title]").forEach((el) => {
+    const text = t(el.getAttribute("data-i18n-title"));
+    el.setAttribute("title", text);
+    el.setAttribute("aria-label", text);
+  });
+  document.documentElement.lang = I18N.language;
+}
+
+// Tags de estado (ocioso / preparando… / concluido / falhou / cancelado).
+function setTag(id, state, busyKey) {
+  const tag = $(id);
+  if (!tag) return;
+  const map = { idle: "common.idle", done: "common.done", failed: "common.failed",
+                cancelled: "common.cancelled", busy: busyKey };
+  tag.className = "tag" + (state === "busy" ? " busy" : state === "done" ? " done" : "");
+  setText(tag, map[state] || "common.idle");
+}
+
+function doneState(p) {
+  return p.ok ? "done" : (p.cancelled ? "cancelled" : "failed");
+}
+
+function useLanguage(cfg) {
+  I18N.tables = (cfg && cfg.translations) || I18N.tables;
+  I18N.source = (cfg && cfg.source) || I18N.source;
+  I18N.fallback = (cfg && cfg.fallback) || I18N.fallback;
+  I18N.language = (cfg && cfg.language) || I18N.language;
 }
 
 async function loadI18n() {
-  const block = $("settings-language-block");
-  if (block) block.hidden = !I18N_ENABLED;
   try {
-    const cfg = await window.pywebview.api.get_i18n();
-    // Enquanto desligado, renderiza sempre em PT-BR — assim ninguém que já tinha
-    // escolhido "English" fica preso numa tela meio traduzida agora que o seletor
-    // sumiu. A preferência salva NÃO é apagada: segue em options.json e volta a
-    // valer sozinha quando I18N_ENABLED virar true.
-    setLanguageTables(I18N_ENABLED ? cfg : Object.assign({}, cfg, { language: "pt-BR" }));
-    applyStaticTranslations();
+    useLanguage(await window.pywebview.api.get_i18n());
+    applyTranslations();
     const sel = $("settings-language");
     if (sel) sel.value = I18N.language;
   } catch (e) {
-    console.error(e);  // i18n failure must never blank the app — keep PT fallback
+    console.error(e);  // i18n nunca pode deixar a tela em branco — o HTML ja vem em PT
   }
+}
+
+// Troca ao vivo: re-renderiza o texto guardado nos elementos E recarrega as areas
+// que sao montadas a partir de dados (listas, painel, status).
+async function switchLanguage(lang) {
+  try { await window.pywebview.api.set_language(lang); } catch (err) { console.error(err); }
+  I18N.language = lang;
+  applyTranslations();
+  refreshAllScreens();
+}
+
+function refreshAllScreens() {
+  loadOverview();
+  loadPrepareStatus();
+  loadRebuildStatus();
+  loadAddStatus();
+  loadRemoveStatus(true);  // quiet: nao repetir "N musicas na lista" a cada troca
+  loadIsoStatus();
+  updatePlCount();
+  updateRmCount();
+  doPreview();  // a linha de previa pode estar mostrando um erro vindo do backend
 }
 
 // ---- Recompilar DATs + Backup ---------------------------------------------
@@ -113,22 +215,14 @@ function setRbBusy(busy) {
   $("rb-progress").classList.toggle("busy", busy);
   $("btn-rb-cancel").hidden = !busy;
   setRbButtons(!busy);
-  if (busy) {
-    const tag = $("rb-status-tag");
-    tag.className = "tag busy";
-    tag.textContent = "recompilando…";
-  }
+  if (busy) setTag("rb-status-tag", "busy", "rb.busy");
 }
 
 function setBkBusy(busy) {
   $("btn-bk-create").disabled = busy;
   $("bk-confirm").disabled = busy;
   $("btn-bk-restore").disabled = busy || !$("bk-confirm").checked;
-  if (busy) {
-    const tag = $("bk-status-tag");
-    tag.className = "tag busy";
-    tag.textContent = "trabalhando…";
-  }
+  if (busy) setTag("bk-status-tag", "busy", "bk.busy");
 }
 
 async function loadRebuildStatus() {
@@ -143,28 +237,28 @@ async function loadRebuildStatus() {
     const el = $("rb-tools-status");
     if (s.rebuild_ready) {
       el.className = "tools ok";
-      el.textContent = "✔ ferramentas e workspace prontos para recompilar";
+      setText(el, "rb.ready", null, "✔");
     } else {
       el.className = "tools bad";
       const missing = [];
       if (!tools.hash_build) missing.push("hash_build");
       if (!tools.dave) missing.push("dave");
-      if (!s.has_streams) missing.push("pasta STREAMS");
-      if (!s.has_assets) missing.push("pasta ASSETS");
-      el.textContent = "✖ faltando: " + missing.join(", ");
+      if (!s.has_streams) missing.push(t("rb.folder_streams"));
+      if (!s.has_assets) missing.push(t("rb.folder_assets"));
+      setText(el, "common.missing", { items: missing.join(", ") }, "✖");
     }
 
     const bk = $("bk-latest");
     if (s.latest_backup) {
       bk.className = "tools ok";
-      bk.textContent = "último backup: " + s.latest_backup;
+      setText(bk, "bk.latest", { name: s.latest_backup });
     } else {
       bk.className = "tools";
-      bk.textContent = "nenhum backup ainda";
+      setText(bk, "bk.none");
     }
   } catch (e) {
     console.error(e);
-    showLoadError("rb-tools-status", "✖ falha ao consultar o backend");
+    showLoadError("rb-tools-status");
   }
 }
 
@@ -174,30 +268,26 @@ window.__mc3.on("rb_status", (p) => {
 window.__mc3.on("rb_log", (p) => rbLog(p.line));
 window.__mc3.on("rb_busy", (p) => setRbBusy(!!p.busy));
 window.__mc3.on("rb_done", (p) => {
-  const tag = $("rb-status-tag");
-  tag.className = "tag " + (p.ok ? "done" : "");
-  tag.textContent = p.ok ? "concluído" : (p.cancelled ? "cancelado" : "falhou");
-  if (p.ok) rbLog("✔ recompilação concluída", "ok");
-  else { rbLog("✖ falhou: " + (p.error || ""), "err"); if (!p.cancelled) noteError("Recompilar DATs", p.error, "rb-console"); }
+  setTag("rb-status-tag", doneState(p));
+  if (p.ok) rbLog("✔ " + t("rb.done"), "ok");
+  else { rbLog("✖ " + t("common.failed_with", { error: p.error || "" }), "err"); if (!p.cancelled) noteError("title.rebuild", p.error, "rb-console"); }
   loadRebuildStatus();
 });
 
 window.__mc3.on("bk_log", (p) => bkLog(p.line));
 window.__mc3.on("bk_busy", (p) => setBkBusy(!!p.busy));
 window.__mc3.on("bk_done", (p) => {
-  const tag = $("bk-status-tag");
-  tag.className = "tag " + (p.ok ? "done" : "");
-  tag.textContent = p.ok ? "concluído" : (p.cancelled ? "cancelado" : "falhou");
+  setTag("bk-status-tag", doneState(p));
   if (p.ok) {
     const r = p.result || {};
     if (p.kind === "restore") {
-      bkLog("✔ restaurado: " + (r.restored || 0) + " arquivo(s); removido(s): " + (r.removed || 0), "ok");
+      bkLog("✔ " + t("bk.restored", { restored: r.restored || 0, removed: r.removed || 0 }), "ok");
     } else {
-      bkLog("✔ backup criado (" + (r.count || 0) + " arquivo(s))", "ok");
+      bkLog("✔ " + t("bk.created", { n: r.count || 0 }), "ok");
     }
   } else {
-    bkLog("✖ falhou: " + (p.error || ""), "err");
-    if (!p.cancelled) noteError("Backup", p.error, "bk-console");
+    bkLog("✖ " + t("common.failed_with", { error: p.error || "" }), "err");
+    if (!p.cancelled) noteError("title.backup", p.error, "bk-console");
   }
   // reset the destructive confirm gate after any restore/backup
   $("bk-confirm").checked = false;
@@ -260,11 +350,11 @@ function collectBatchRows() {
 
 function updatePlCount() {
   const checked = Array.from(document.querySelectorAll("#add-playlists input[type=checkbox]:checked"));
-  $("pl-count").textContent = checked.length + " selecionada(s)";
+  setText("pl-count", "common.selected_count", { n: checked.length });
   $("pl-selected-count").textContent = checked.length;
   const box = $("pl-selected");
   if (!checked.length) {
-    box.innerHTML = '<span class="muted" style="font-size:12px">nenhuma playlist selecionada</span>';
+    box.innerHTML = '<span class="muted" style="font-size:12px">' + escapeHtml(t("add.pl_none_selected")) + "</span>";
   } else {
     box.innerHTML = checked.map((el) =>
       '<span class="pl-chip"><b>' + escapeHtml(el.getAttribute("data-city") || "?") + "</b> · " +
@@ -290,17 +380,16 @@ function setAddBusy(busy) {
   $("mode-single").disabled = busy;
   $("mode-batch").disabled = busy;
   updateAddButton(busy);
-  if (busy) {
-    const tag = $("add-status-tag");
-    tag.className = "tag busy";
-    tag.textContent = "adicionando…";
-  }
+  if (busy) setTag("add-status-tag", "busy", "add.busy");
 }
 
 function renderPlaylists() {
   const box = $("add-playlists");
+  // Esta lista e remontada na troca de idioma e depois de instalar uma ferramenta.
+  // Sem guardar a selecao antes, a escolha do usuario sumia em silencio.
+  const keep = new Set(selectedPlaylistRels());
   if (!addPlaylists.length) {
-    box.innerHTML = '<div class="console-line muted">— nenhuma playlist (workspace sem game files) —</div>';
+    box.innerHTML = '<div class="console-line muted">' + escapeHtml(t("add.pl_none_available")) + "</div>";
     updatePlCount();
     return;
   }
@@ -316,7 +405,10 @@ function renderPlaylists() {
     });
   });
   box.innerHTML = html;
-  box.querySelectorAll("input[type=checkbox]").forEach((el) => el.addEventListener("change", updatePlCount));
+  box.querySelectorAll("input[type=checkbox]").forEach((el) => {
+    if (keep.has(el.getAttribute("data-rel"))) el.checked = true;
+    el.addEventListener("change", updatePlCount);
+  });
   updatePlCount();
 }
 
@@ -326,8 +418,11 @@ async function loadAddStatus() {
     addGenreDefaults = s.genre_defaults || {};
     addCityPlaylists = s.city_playlists || [];
     // Fill the single-mode genre AND the batch "apply to all" genre from one list.
+    // Guarda o genero escolhido: remontar sem isso voltava ao primeiro da lista,
+    // e a musica seria adicionada no genero errado sem ninguem perceber.
     [$("add-genre"), $("batch-bulk-genre")].forEach((sel) => {
       if (!sel) return;
+      const prev = sel.value;
       sel.innerHTML = "";
       (s.genres || []).forEach((g) => {
         const opt = document.createElement("option");
@@ -335,6 +430,7 @@ async function loadAddStatus() {
         opt.textContent = g;
         sel.appendChild(opt);
       });
+      if (prev && (s.genres || []).indexOf(prev) !== -1) sel.value = prev;
     });
     // Also fill the Remover genre filter at boot, so all 6 genres show up even
     // before "Atualizar lista" is clicked (matches the original).
@@ -345,19 +441,19 @@ async function loadAddStatus() {
     const el = $("add-tools-status");
     if (s.tools_ready) {
       el.className = "tools ok";
-      el.textContent = "✔ ferramentas de conversão prontas" + (s.has_playlists ? "" : " · workspace sem playlists ainda");
+      setText(el, s.has_playlists ? "add.tools_ready" : "add.no_playlists_yet", null, "✔");
     } else {
       el.className = "tools bad";
       const missing = [];
-      if (!s.has_ffmpeg) missing.push("FFmpeg (converte o áudio)");
+      if (!s.has_ffmpeg) missing.push(t("add.missing_ffmpeg"));
       if (!s.has_rstm_build) missing.push("rstm_build");
       if (!s.has_strtbl) missing.push("strtbl");
-      el.textContent = "✖ faltando: " + missing.join(", ") + " — adicionar está bloqueado";
+      setText(el, "add.tools_missing", { items: missing.join(", ") }, "✖");
     }
     updateAddButton();
   } catch (e) {
     console.error(e);
-    showLoadError("add-tools-status", "✖ falha ao consultar o backend");
+    showLoadError("add-tools-status");
   }
 }
 
@@ -374,8 +470,16 @@ async function doPreview() {
     if (r.ok) {
       $("prev-key").textContent = r.string_key;
       $("prev-entry").textContent = r.playlist_entry;
-      $("prev-target").textContent = r.stream_target + (r.exists ? "   ⚠ já existe" : "");
-      $("add-asset").placeholder = r.asset_name || "(automático)";
+      $("prev-target").textContent = r.stream_target + (r.exists ? "   ⚠ " + t("add.already_exists") : "");
+      // Nome sugerido e dado: tira a chave para a troca de idioma nao apagar a sugestao.
+      const asset = $("add-asset");
+      if (r.asset_name) {
+        asset.removeAttribute("data-i18n-placeholder");
+        asset.placeholder = r.asset_name;
+      } else {
+        asset.setAttribute("data-i18n-placeholder", "add.asset_auto");
+        asset.placeholder = t("add.asset_auto");
+      }
     } else {
       $("prev-key").textContent = "--";
       $("prev-entry").textContent = r.error || "--";
@@ -388,19 +492,20 @@ async function doPreview() {
 
 window.__mc3.on("add_selected", (p) => {
   addHasSource = true;
-  $("add-path").textContent = p.name || p.path;
+  setRaw("add-path", p.name || p.path);
   $("btn-add-listen").disabled = false;
   updateAddButton();
 });
 window.__mc3.on("batch_loaded", (p) => {
   const rows = (p && p.rows) || [];
   batchRowCount = rows.length;
-  $("batch-count").textContent = rows.length ? rows.length + " arquivo(s)" : "nenhum arquivo selecionado";
+  if (rows.length) setText("batch-count", "add.batch_files", { n: rows.length });
+  else setText("batch-count", "add.no_file");
   const box = $("batch-rows");
   $("batch-bulk").hidden = !rows.length;  // "aplicar a todas" só faz sentido com faixas
-  $("batch-bulk-info").textContent = "";
+  setRaw("batch-bulk-info", "");
   if (!rows.length) {
-    box.innerHTML = '<div class="console-line muted">— nenhum arquivo —</div>';
+    box.innerHTML = '<div class="console-line muted">' + escapeHtml(t("add.batch_empty")) + "</div>";
     updateAddButton();
     return;
   }
@@ -411,8 +516,10 @@ window.__mc3.on("batch_loaded", (p) => {
       .join("");
     return '<div class="batch-row" data-index="' + r.index + '">' +
       '<span class="batch-name" title="' + escapeHtml(r.name) + '">' + escapeHtml(r.name) + "</span>" +
-      '<input class="batch-title" placeholder="Título" value="' + escapeHtml(r.title || "") + '" />' +
-      '<input class="batch-artist" placeholder="Artista" value="' + escapeHtml(r.artist || "") + '" />' +
+      '<input class="batch-title" data-i18n-placeholder="add.field_title" placeholder="' +
+        escapeHtml(t("add.field_title")) + '" value="' + escapeHtml(r.title || "") + '" />' +
+      '<input class="batch-artist" data-i18n-placeholder="add.field_artist" placeholder="' +
+        escapeHtml(t("add.field_artist")) + '" value="' + escapeHtml(r.artist || "") + '" />' +
       '<select class="batch-genre">' + opts + "</select>" +
       "</div>";
   }).join("");
@@ -421,29 +528,27 @@ window.__mc3.on("batch_loaded", (p) => {
 window.__mc3.on("add_guess", (g) => {
   if (g.title && !$("add-title").value) $("add-title").value = g.title;
   if (g.artist && !$("add-artist").value) $("add-artist").value = g.artist;
-  $("add-detected").textContent = g.detected_by
-    ? "detectado por: " + g.detected_by + (g.asset_name ? " · nome sugerido: " + g.asset_name : "")
-    : "";
+  const source = g.detected_by_key ? { key: g.detected_by_key } : g.detected_by;
+  if (!source) setRaw("add-detected", "");
+  else if (g.asset_name) setText("add-detected", "add.detected_by_name", { source: source, name: g.asset_name });
+  else setText("add-detected", "add.detected_by", { source: source });
   doPreview();
 });
 window.__mc3.on("add_status", (p) => { if (typeof p.progress === "number") setAddProgress(p.progress); });
 window.__mc3.on("add_log", (p) => addLog(p.line));
 window.__mc3.on("add_busy", (p) => setAddBusy(!!p.busy));
 window.__mc3.on("add_done", (p) => {
-  const tag = $("add-status-tag");
-  tag.className = "tag " + (p.ok ? "done" : "");
-  tag.textContent = p.ok ? "concluído" : (p.cancelled ? "cancelado" : "falhou");
+  setTag("add-status-tag", doneState(p));
   if (p.ok) {
     const r = p.result || {};
-    addLog("✔ " + (r.added || 1) + " música(s) adicionada(s) — playlists alteradas: " +
-      (r.playlist_changes || 0) + " · backup: " + (r.backup || "?"), "ok");
-    (r.skipped || []).forEach((s) => addLog("• pulado: " + s, "err"));
+    addLog("✔ " + t("add.done", { n: r.added || 1, pl: r.playlist_changes || 0, backup: r.backup || "?" }), "ok");
+    (r.skipped || []).forEach((s) => addLog("• " + t("add.skipped", { item: s }), "err"));
     $("add-confirm").checked = false;
     updateAddButton();
   } else {
-    addLog("✖ falhou: " + (p.error || ""), "err");
+    addLog("✖ " + t("common.failed_with", { error: p.error || "" }), "err");
     logBackupHint(addLog, p);
-    if (!p.cancelled) noteError("Adicionar música", p.error, "add-console");
+    if (!p.cancelled) noteError("title.add", p.error, "add-console");
   }
   loadOverview();
   loadRemoveStatus(); // added songs should show up in the Remover list
@@ -477,11 +582,7 @@ function setPpBusy(busy) {
   $("pp-progress").classList.toggle("busy", busy);
   $("btn-pp-cancel").hidden = !busy;
   updatePpButtons(busy);
-  if (busy) {
-    const tag = $("pp-status-tag");
-    tag.className = "tag busy";
-    tag.textContent = "preparando…";
-  }
+  if (busy) setTag("pp-status-tag", "busy", "prep.busy");
 }
 
 function toggleOk(id, ok) {
@@ -494,11 +595,11 @@ async function loadPrepareStatus() {
     ppStatus = s;
     if (s.iso) {
       ppHasIso = true;
-      $("pp-iso").textContent = s.iso;
+      setRaw("pp-iso", s.iso);
     } else {
       // No ISO selected (fresh boot, or right after a reset) — reflect it.
       ppHasIso = false;
-      $("pp-iso").textContent = "nenhuma ISO escolhida";
+      setText("pp-iso", "prep.no_iso");
     }
     toggleOk("pp-c-gamefiles", s.has_game_files);
     toggleOk("pp-c-assets", s.has_assets);
@@ -507,25 +608,25 @@ async function loadPrepareStatus() {
     const el = $("pp-tools-status");
     if (!s.tools_ready) {
       el.className = "tools bad";
-      el.textContent = "✖ faltam ferramentas (dave/hash_build/strtbl/.lst em tools/)";
+      setText(el, "prep.tools_missing", null, "✖");
     } else if (s.prepared) {
       el.className = "tools ok";
-      el.textContent = "✔ workspace pronto para editar";
+      setText(el, "prep.ready", null, "✔");
     } else {
       el.className = "tools";
-      el.textContent = "ferramentas OK · workspace ainda não preparado";
+      setText(el, "prep.tools_ok_not_ready");
     }
     updatePpButtons(false);
   } catch (e) {
     console.error(e);
-    showLoadError("pp-tools-status", "✖ falha ao consultar o backend");
+    showLoadError("pp-tools-status");
   }
 }
 
 window.__mc3.on("pp_iso_selected", (p) => {
   ppHasIso = true;
-  $("pp-iso").textContent = p.name || p.path;
-  $("pp-validation").textContent = "";
+  setRaw("pp-iso", p.name || p.path);
+  setRaw("pp-validation", "");
   $("pp-validation").className = "tools";
   updatePpButtons();
 });
@@ -533,25 +634,26 @@ window.__mc3.on("pp_validation", (p) => {
   const el = $("pp-validation");
   if (p && p.error) {
     el.className = "tools bad";
-    el.textContent = "✖ validação falhou: " + p.error;
+    setText(el, "prep.validation_failed", { error: p.error }, "✖");
   } else if (p && p.supported) {
     el.className = "tools ok";
-    el.textContent = "✔ ISO suportada — " + (p.game_name || "MC3") + " · BOOT2: " + (p.boot_id || "?") +
-      " · ASSETS.DAT " + (p.has_assets ? "✓" : "✗") + " · STREAMS.DAT " + (p.has_streams ? "✓" : "✗");
+    setText(el, "prep.iso_supported", {
+      game: p.game_name || "MC3", boot: p.boot_id || "?",
+      assets: p.has_assets ? "✓" : "✗", streams: p.has_streams ? "✓" : "✗",
+    }, "✔");
   } else {
     el.className = "tools bad";
-    el.textContent = "⚠️ ISO não suportada" + (p && p.boot_id ? " (BOOT2: " + p.boot_id + ")" : "");
+    if (p && p.boot_id) setText(el, "prep.iso_unsupported_boot", { boot: p.boot_id }, "⚠️");
+    else setText(el, "prep.iso_unsupported", null, "⚠️");
   }
 });
 window.__mc3.on("pp_status", (p) => { if (typeof p.progress === "number") setPpProgress(p.progress); });
 window.__mc3.on("pp_log", (p) => ppLog(p.line));
 window.__mc3.on("pp_busy", (p) => setPpBusy(!!p.busy));
 window.__mc3.on("pp_done", (p) => {
-  const tag = $("pp-status-tag");
-  tag.className = "tag " + (p.ok ? "done" : "");
-  tag.textContent = p.ok ? "concluído" : (p.cancelled ? "cancelado" : "falhou");
-  if (p.ok) ppLog("✔ " + (p.kind || "preparação") + " concluído", "ok");
-  else { ppLog("✖ falhou: " + (p.error || ""), "err"); if (!p.cancelled) noteError("Preparar Projeto", p.error, "pp-console"); }
+  setTag("pp-status-tag", doneState(p));
+  if (p.ok) ppLog("✔ " + t("prep.done_kind", { kind: p.kind || "" }), "ok");
+  else { ppLog("✖ " + t("common.failed_with", { error: p.error || "" }), "err"); if (!p.cancelled) noteError("title.prepare", p.error, "pp-console"); }
   $("pp-confirm").checked = false;
   $("pp-reset-confirm").checked = false;
   loadPrepareStatus();
@@ -583,7 +685,7 @@ function updateRmButton(busy) {
 }
 
 function updateRmCount() {
-  $("rm-count").textContent = selectedSongs().length + " selecionada(s)";
+  setText("rm-count", "common.selected_count", { n: selectedSongs().length });
   updateRmButton();
 }
 
@@ -592,11 +694,7 @@ function setRmBusy(busy) {
   $("btn-rm-cancel").hidden = !busy;
   $("btn-rm-refresh").disabled = busy;
   updateRmButton(busy);
-  if (busy) {
-    const tag = $("rm-status-tag");
-    tag.className = "tag busy";
-    tag.textContent = "removendo…";
-  }
+  if (busy) setTag("rm-status-tag", "busy", "rm.busy");
 }
 
 function applyFilters() {
@@ -615,15 +713,16 @@ function fillRemoveGenreFilter(genres) {
   if (!gsel) return;
   const list = genres && genres.length ? genres : [];
   const prev = gsel.value;
-  gsel.innerHTML = '<option value="__all__">Todos os gêneros</option>' +
+  gsel.innerHTML = '<option value="__all__">' + escapeHtml(t("rm.all_genres")) + "</option>" +
     list.map((g) => '<option value="' + escapeHtml(g) + '">' + escapeHtml(g) + "</option>").join("");
   gsel.value = prev === "__all__" || list.indexOf(prev) !== -1 ? prev : "__all__";
 }
 
 function renderSongs(songs, playlistCount, genres) {
+  const keep = new Set(selectedSongs().map((x) => x.genre + "/" + x.asset_name));
   rmSongs = songs || [];
-  $("rm-stats").textContent = rmSongs.length + " música(s)" +
-    (playlistCount != null ? " · " + playlistCount + " playlists" : "");
+  if (playlistCount != null) setText("rm-stats", "rm.stats_pl", { n: rmSongs.length, pl: playlistCount });
+  else setText("rm-stats", "rm.stats", { n: rmSongs.length });
 
   // Full genre list (like the original) — falls back to the genres present.
   const genreOptions = genres && genres.length ? genres : Array.from(new Set(rmSongs.map((s) => s.genre))).sort();
@@ -631,11 +730,13 @@ function renderSongs(songs, playlistCount, genres) {
 
   const box = $("rm-songs");
   if (!rmSongs.length) {
-    box.innerHTML = '<div class="console-line muted">— nenhuma música (workspace vazio ou não preparado) —</div>';
+    box.innerHTML = '<div class="console-line muted">' + escapeHtml(t("rm.empty")) + "</div>";
     updateRmCount();
     return;
   }
-  const head = '<div class="song-head"><span></span><span>Gênero</span><span>Nome interno</span><span>Pl</span><span>Str</span></div>';
+  const head = '<div class="song-head"><span></span>' +
+    ["rm.col_genre", "rm.col_name", "rm.col_pl", "rm.col_str"]
+      .map((k) => "<span>" + escapeHtml(t(k)) + "</span>").join("") + "</div>";
   box.innerHTML = head + rmSongs.map((s) => {
     const text = (s.genre + " " + s.asset_name).toLowerCase();
     return '<label class="song-item" data-text="' + escapeHtml(text) + '" data-genre="' + escapeHtml(s.genre) + '">' +
@@ -646,34 +747,37 @@ function renderSongs(songs, playlistCount, genres) {
       '<span class="song-str' + (s.has_strings ? "" : " warn") + '">' + (s.has_strings ? "✓" : "✗") + "</span>" +
       "</label>";
   }).join("");
-  box.querySelectorAll("input[type=checkbox]").forEach((el) => el.addEventListener("change", updateRmCount));
+  box.querySelectorAll("input[type=checkbox]").forEach((el) => {
+    if (keep.has(el.getAttribute("data-genre") + "/" + el.getAttribute("data-asset"))) el.checked = true;
+    el.addEventListener("change", updateRmCount);
+  });
   applyFilters();
   updateRmCount();
 }
 
-async function loadRemoveStatus() {
+async function loadRemoveStatus(quiet) {
   try {
     const s = await window.pywebview.api.get_prepare_status();
     const el = $("rm-tools-status");
     if (s.prepared) {
       el.className = "tools ok";
-      el.textContent = "✔ workspace pronto";
-      refreshSongs(); // auto-load the song list (like the original)
+      setText(el, "rm.ready", null, "✔");
+      refreshSongs(quiet); // auto-load the song list (like the original)
     } else {
       el.className = "tools bad";
-      el.textContent = "✖ prepare o projeto primeiro (aba Preparar Projeto)";
+      setText(el, "rm.prepare_first", null, "✖");
     }
   } catch (e) {
     console.error(e);
-    showLoadError("rm-tools-status", "✖ falha ao consultar o backend");
+    showLoadError("rm-tools-status");
   }
 }
 
-async function refreshSongs() {
+async function refreshSongs(quiet) {
   try {
     const r = await window.pywebview.api.list_songs();
     renderSongs(r.songs || [], r.playlist_count, r.genres);
-    rmLog((r.songs || []).length + " música(s) na lista.");
+    if (!quiet) rmLog(t("rm.listed", { n: (r.songs || []).length }));
   } catch (e) {
     console.error(e);
   }
@@ -683,19 +787,18 @@ window.__mc3.on("rm_status", (p) => { if (typeof p.progress === "number") setRmP
 window.__mc3.on("rm_log", (p) => rmLog(p.line));
 window.__mc3.on("rm_busy", (p) => setRmBusy(!!p.busy));
 window.__mc3.on("rm_done", (p) => {
-  const tag = $("rm-status-tag");
-  tag.className = "tag " + (p.ok ? "done" : "");
-  tag.textContent = p.ok ? "concluído" : (p.cancelled ? "cancelado" : "falhou");
+  setTag("rm-status-tag", doneState(p));
   if (p.ok) {
     const r = p.result || {};
-    rmLog("✔ " + (r.removed || 0) + " removida(s) — áudio: " + (r.removed_audio || 0) +
-      " · playlists: " + (r.playlist_changes || 0) + " · strings: " + (r.removed_strings || 0) +
-      (r.rebuilt ? " · DATs recompilados" : "") + " · backup: " + (r.backup || "?"), "ok");
+    rmLog("✔ " + t(r.rebuilt ? "rm.done_rebuilt" : "rm.done", {
+      n: r.removed || 0, audio: r.removed_audio || 0, pl: r.playlist_changes || 0,
+      str: r.removed_strings || 0, backup: r.backup || "?",
+    }), "ok");
     $("rm-confirm").checked = false;
   } else {
-    rmLog("✖ falhou: " + (p.error || ""), "err");
+    rmLog("✖ " + t("common.failed_with", { error: p.error || "" }), "err");
     logBackupHint(rmLog, p);
-    if (!p.cancelled) noteError("Remover música", p.error, "rm-console");
+    if (!p.cancelled) noteError("title.remove", p.error, "rm-console");
   }
   refreshSongs(); // reflect the new on-disk state
   loadOverview();
@@ -719,53 +822,48 @@ function setGiBusy(busy) {
   $("btn-gi-cancel").hidden = !busy;
   $("btn-gi-output").disabled = busy;
   updateGiButton(busy);
-  if (busy) {
-    const tag = $("gi-status-tag");
-    tag.className = "tag busy";
-    tag.textContent = "gerando…";
-  }
+  if (busy) setTag("gi-status-tag", "busy", "iso.busy");
 }
 
 async function loadIsoStatus() {
   try {
     const s = await window.pywebview.api.get_iso_status();
     giReady = !!s.ready;
-    if (s.output) $("gi-output").textContent = s.output;
+    if (s.output) setRaw("gi-output", s.output);
     const el = $("gi-tools-status");
     if (s.ready) {
       el.className = "tools ok";
-      el.textContent = "✔ ImgBurn e Arquivos da ISO prontos";
+      setText(el, "iso.ready", null, "✔");
     } else {
       el.className = "tools bad";
       const missing = [];
-      if (!s.imgburn) missing.push("ImgBurn (instale-o no Início)");
-      if (!s.has_rebuild_tools) missing.push("ferramentas PS2 (dave/hash_build) — a ISO recompila os DATs antes");
-      if (!s.has_game_files) missing.push("Arquivos da ISO (prepare o projeto)");
+      if (!s.imgburn) missing.push(t("iso.missing_imgburn"));
+      if (!s.has_rebuild_tools) missing.push(t("iso.missing_ps2"));
+      if (!s.has_game_files) missing.push(t("iso.missing_gamefiles"));
       else if (!s.has_system_cnf) missing.push("SYSTEM.CNF");
-      el.textContent = "✖ faltando: " + missing.join(", ");
+      setText(el, "common.missing", { items: missing.join(", ") }, "✖");
     }
     updateGiButton(false);
   } catch (e) {
     console.error(e);
-    showLoadError("gi-tools-status", "✖ falha ao consultar o backend");
+    showLoadError("gi-tools-status");
   }
 }
 
-window.__mc3.on("gi_output", (p) => { $("gi-output").textContent = p.path || "—"; });
+window.__mc3.on("gi_output", (p) => { setRaw("gi-output", p.path || "—"); });
 window.__mc3.on("gi_status", (p) => { if (typeof p.progress === "number") setGiProgress(p.progress); });
 window.__mc3.on("gi_log", (p) => giLog(p.line));
 window.__mc3.on("gi_busy", (p) => setGiBusy(!!p.busy));
 window.__mc3.on("gi_done", (p) => {
-  const tag = $("gi-status-tag");
-  tag.className = "tag " + (p.ok ? "done" : "");
-  tag.textContent = p.ok ? "concluído" : (p.cancelled ? "cancelado" : "falhou");
+  setTag("gi-status-tag", doneState(p));
   if (p.ok) {
     const r = p.result || {};
-    const mb = r.bytes ? (r.bytes / 1048576).toFixed(1) + " MB" : "";
-    giLog("✔ ISO gerada → " + (r.output || "?") + (mb ? " (" + mb + ")" : ""), "ok");
+    const mb = r.bytes ? (r.bytes / 1048576).toFixed(1) : "";
+    const path = r.output || "?";
+    giLog("✔ " + (mb ? t("iso.done_size", { path: path, mb: mb }) : t("iso.done", { path: path })), "ok");
   } else {
-    giLog("✖ falhou: " + (p.error || ""), "err");
-    if (!p.cancelled) noteError("Gerar ISO", p.error, "gi-console");
+    giLog("✖ " + t("common.failed_with", { error: p.error || "" }), "err");
+    if (!p.cancelled) noteError("title.iso", p.error, "gi-console");
   }
   loadIsoStatus();
 });
@@ -789,18 +887,20 @@ function renderPrograms(programs, boxId) {
   if (!box) return;
   box.innerHTML = (programs || []).map((p) => {
     let cls, txt;
-    if (p.found) { cls = "ok"; txt = "✔ instalado"; }
-    else if (p.essential) { cls = "bad"; txt = "✖ faltando"; }
-    else { cls = "opt"; txt = "opcional (ausente)"; }
+    if (p.found) { cls = "ok"; txt = "✔ " + t("prog.status_installed"); }
+    else if (p.essential) { cls = "bad"; txt = "✖ " + t("prog.status_missing"); }
+    else { cls = "opt"; txt = t("prog.status_optional"); }
     let action = "";
     if (!p.found && p.kind) {
       action = p.installable
-        ? '<button class="btn ghost small" data-install="' + escapeHtml(p.kind) + '">⬇ Instalar</button>'
-        : '<button class="btn ghost small" data-openpage="' + escapeHtml(p.kind) + '">Abrir página</button>';
+        ? '<button class="btn ghost small" data-install="' + escapeHtml(p.kind) + '">⬇ ' +
+            escapeHtml(t("prog.install")) + "</button>"
+        : '<button class="btn ghost small" data-openpage="' + escapeHtml(p.kind) + '">' +
+            escapeHtml(t("prog.open_page")) + "</button>";
     }
     return '<div class="prog-item"><span class="prog-name">' + escapeHtml(p.name) +
       '</span><span class="prog-role">' + escapeHtml(p.role) +
-      '</span><span class="prog-status ' + cls + '">' + txt + "</span>" + action + "</div>";
+      '</span><span class="prog-status ' + cls + '">' + escapeHtml(txt) + "</span>" + action + "</div>";
   }).join("");
   box.querySelectorAll("[data-install]").forEach((b) =>
     b.addEventListener("click", () => startInstall(b.getAttribute("data-install"))));
@@ -821,14 +921,15 @@ window.__mc3.on("inst_busy", (p) => setInstBusy(!!p.busy));
 window.__mc3.on("inst_done", (p) => {
   const r = (p && p.result) || {};
   if (p.ok && r.reason === "no-winget") {
-    instLog("winget não encontrado — use “Abrir página” para baixar " + (r.label || "a ferramenta") + " manualmente.", "err");
+    instLog(t("inst.no_winget", { tool: r.label || t("inst.the_tool") }), "err");
   } else if (p.ok) {
-    instLog("✔ " + (r.label || "ferramenta") + (r.installed ? " instalada." : " — processo concluído."), "ok");
+    instLog("✔ " + t(r.installed ? "inst.done_installed" : "inst.done_process",
+                     { tool: r.label || t("inst.the_tool") }), "ok");
   } else if (p.cancelled) {
-    instLog("✖ instalação cancelada", "");
+    instLog("✖ " + t("inst.cancelled"), "");
   } else {
-    instLog("✖ falhou: " + (p.error || ""), "err");
-    if (!p.cancelled) noteError("Instalar ferramentas", p.error, "settings-console");
+    instLog("✖ " + t("common.failed_with", { error: p.error || "" }), "err");
+    if (!p.cancelled) noteError("title.install", p.error, "settings-console");
   }
   // Detections changed — refresh the screens that depend on the tools.
   loadOverview();
@@ -851,34 +952,40 @@ async function loadOverview() {
     const s = await window.pywebview.api.get_overview();
     const tag = $("ov-tag");
     tag.className = "tag " + (s.prepared ? "done" : "");
-    tag.textContent = s.prepared ? "workspace pronto" : "não preparado";
+    setText(tag, s.prepared ? "home.tag_ready" : "home.tag_not_ready");
 
     $("ov-stats").innerHTML = [
-      ["Músicas", s.song_count],
-      ["Playlists", s.playlist_count],
-      ["Workspace", s.prepared ? "pronto" : "não preparado"],
-      ["Backup", s.last_backup ? "sim" : "nenhum"],
+      [t("home.stat_songs"), s.song_count],
+      [t("home.stat_playlists"), s.playlist_count],
+      [t("home.stat_workspace"), t(s.prepared ? "home.ws_ready" : "home.ws_not_ready")],
+      [t("home.stat_backup"), t(s.last_backup ? "home.backup_yes" : "home.backup_none")],
     ].map(([l, v]) => '<div class="stat-tile"><div class="label">' + escapeHtml(l) +
       '</div><div class="value">' + escapeHtml(String(v)) + "</div></div>").join("");
 
     renderPrograms(s.programs, "ov-programs");
     renderPrograms(s.programs, "settings-programs");
 
-    const stateText = { ok: "✔ concluído", pending: "⬜ pendente", available: "→ disponível", blocked: "🔒 prepare primeiro" };
+    const stateText = {
+      ok: "✔ " + t("home.step_ok"),
+      pending: "⬜ " + t("home.step_pending"),
+      available: "→ " + t("home.step_available"),
+      blocked: "🔒 " + t("home.step_blocked"),
+    };
     $("ov-steps").innerHTML = (s.steps || []).map((st) => {
       const btn = (st.target && st.target !== "card-inicio")
-        ? '<button class="btn ghost small" data-goto="' + escapeHtml(st.target) + '">Ir para</button>' : "";
+        ? '<button class="btn ghost small" data-goto="' + escapeHtml(st.target) + '">' +
+            escapeHtml(t("home.go_to")) + "</button>" : "";
       return '<div class="step-item ' + (st.state === "ok" ? "ok" : "") + '">' +
         '<span class="step-num">' + st.n + "</span>" +
         '<span class="step-title">' + escapeHtml(st.title) + "</span>" +
-        '<span class="step-state ' + st.state + '">' + (stateText[st.state] || "") + "</span>" +
+        '<span class="step-state ' + st.state + '">' + escapeHtml(stateText[st.state] || "") + "</span>" +
         btn + "</div>";
     }).join("");
     $("ov-steps").querySelectorAll("[data-goto]").forEach((b) =>
       b.addEventListener("click", () => goToCard(b.getAttribute("data-goto"))));
   } catch (e) {
     console.error(e);
-    showLoadError("ov-tag", "✖ falha ao carregar o painel");
+    showLoadError("ov-tag", "home.load_failed");
   }
 }
 
@@ -946,7 +1053,7 @@ function wireActions() {
   $("btn-pp-reset").addEventListener("click", () => {
     if ($("btn-pp-reset").disabled) return;
     $("pp-console").innerHTML = "";
-    $("pp-validation").textContent = "";
+    setRaw("pp-validation", "");
     $("pp-validation").className = "tools";
     setPpProgress(0);
     window.pywebview.api.reset_project();
@@ -997,9 +1104,8 @@ function wireActions() {
     const genre = $("batch-bulk-genre").value;
     const selects = document.querySelectorAll("#batch-rows .batch-genre");
     selects.forEach((sel) => { sel.value = genre; });
-    $("batch-bulk-info").textContent = selects.length
-      ? `✔ ${selects.length} faixa(s) → ${genre}`
-      : "nenhuma faixa para aplicar";
+    if (selects.length) setText("batch-bulk-info", "add.bulk_applied", { n: selects.length, genre: genre }, "✔");
+    else setText("batch-bulk-info", "add.bulk_none");
   });
   $("btn-add-batch").addEventListener("click", () => {
     if ($("btn-add-batch").disabled) return;
@@ -1013,7 +1119,7 @@ function wireActions() {
   });
 
   // Remover música
-  $("btn-rm-refresh").addEventListener("click", refreshSongs);
+  $("btn-rm-refresh").addEventListener("click", () => refreshSongs());
   $("rm-search").addEventListener("input", applyFilters);
   $("rm-genre-filter").addEventListener("change", applyFilters);
   $("btn-rm-all").addEventListener("click", () => {
@@ -1083,14 +1189,7 @@ function wireActions() {
     el.addEventListener("change", (e) =>
       window.pywebview.api.set_option(key, e.target.type === "checkbox" ? e.target.checked : e.target.value));
   };
-  $("settings-language").addEventListener("change", async (e) => {
-    const lang = e.target.value;
-    try { await window.pywebview.api.set_language(lang); } catch (err) { console.error(err); }
-    I18N.language = lang;
-    I18N.dict = I18N.tables[lang] || {};
-    applyStaticTranslations();
-    loadOverview();  // repaint the one dynamic area that renders labels
-  });
+  $("settings-language").addEventListener("change", (e) => switchLanguage(e.target.value));
   persistOpt("settings-remove-audio", "remove_audio");
   persistOpt("settings-remove-playlists", "remove_playlists");
   persistOpt("settings-remove-strings", "remove_strings");
@@ -1121,21 +1220,20 @@ function wireActions() {
 // usuario de descobrir sozinho que a saida esta em Recompilar & Backup.
 function logBackupHint(logFn, payload) {
   if (!payload || !payload.backup) return;
-  logFn("↩ para desfazer: Recompilar & Backup → marque a confirmação → " +
-    "“Restaurar último backup”. Backup desta operação: " + payload.backup, "err");
+  logFn("↩ " + t("bk.undo_hint", { backup: payload.backup }), "err");
 }
 
 // ---- error visibility (F1C): surface backend/loader failures on-screen -----
-function showBackendError(msg) {
+function showBackendError(key) {
   const pill = $("backend-pill");
-  if (pill) { pill.textContent = msg || "backend indisponível"; pill.classList.add("error"); }
+  if (pill) { setText(pill, key || "app.backend_unavailable"); pill.classList.add("error"); }
   const banner = $("app-banner");
   if (banner) banner.hidden = false;
 }
 
-function showLoadError(elId, msg) {
+function showLoadError(elId, key) {
   const el = $(elId);
-  if (el) { el.className = "tools bad"; el.textContent = msg || "✖ falha ao consultar o backend"; }
+  if (el) { el.className = "tools bad"; setText(el, key || "common.backend_query_failed", null, "✖"); }
 }
 
 // ---- error report: one click -> pre-filled email to the developer ----------
@@ -1143,12 +1241,13 @@ let lastError = null;
 
 // Called whenever a task fails: remembers what/where + the screen's console text,
 // and reveals the report bar so the user can send it in one click.
-function noteError(screen, error, consoleBoxId) {
+function noteError(screenKey, error, consoleBoxId) {
   const box = consoleBoxId ? $(consoleBoxId) : null;
-  lastError = { screen: screen, error: error || "", log: box ? box.textContent : "" };
+  // O relatorio vai para o desenvolvedor: nome da tela em PT, seja qual for o idioma.
+  lastError = { screen: tSource(screenKey), error: error || "", log: box ? box.textContent : "" };
   const bar = $("error-report-bar");
   if (bar) {
-    $("error-report-text").textContent = "Ocorreu um erro em: " + screen + ".";
+    setText("error-report-text", "report.error_in", { screen: { key: screenKey } });
     bar.hidden = false;
   }
 }
@@ -1166,11 +1265,9 @@ async function sendErrorReport() {
   try {
     const r = await window.pywebview.api.send_error_report(reportPayload());
     showReport(r.report);
-    const msg = r.opened
-      ? "E-mail aberto para " + r.email + " — revise e clique enviar."
-      : "Não abriu o e-mail. Use 📋 Copiar e cole numa mensagem para " + r.email + ".";
-    const info = $("report-info"); if (info) info.textContent = msg;
-    const bar = $("error-report-text"); if (bar) bar.textContent = msg;
+    const key = r.opened ? "report.opened" : "report.not_opened";
+    setText("report-info", key, { email: r.email });
+    setText("error-report-text", key, { email: r.email });
   } catch (e) { console.error(e); }
 }
 
@@ -1189,10 +1286,7 @@ async function copyReport() {
   try {
     const r = await window.pywebview.api.get_error_report(reportPayload());
     const ok = copyToClipboard(r.report);
-    const info = $("report-info");
-    if (info) info.textContent = ok
-      ? "Relatório copiado — cole numa mensagem para " + r.email + "."
-      : "Selecionado abaixo — copie com Ctrl+C e cole para " + r.email + ".";
+    setText("report-info", ok ? "report.copied" : "report.select_copy", { email: r.email });
   } catch (e) { console.error(e); }
 }
 
@@ -1200,7 +1294,8 @@ async function copyReport() {
 async function loadSettings() {
   try {
     const o = await window.pywebview.api.get_options();
-    $("settings-language").value = o.language || "pt-BR";
+    // o salvo pode ser "" (automatico): mostra o idioma que esta valendo de fato
+    $("settings-language").value = I18N.language;
     $("settings-volume").value = o.iso_volume_label || "MClub";
     $("settings-remove-audio").checked = o.remove_audio !== false;
     $("settings-remove-playlists").checked = o.remove_playlists !== false;
@@ -1214,7 +1309,7 @@ async function loadSettings() {
     $("rm-opt-rebuild").checked = !!o.rebuild_after_remove;
   } catch (e) {
     console.error(e);
-    showLoadError("settings-tag", "✖ falha ao carregar");
+    showLoadError("settings-tag", "settings.load_failed");
   }
 }
 
@@ -1222,10 +1317,10 @@ async function loadBackendInfo() {
   try {
     await loadI18n();  // translate the static chrome before anything renders
     const info = await window.pywebview.api.get_app_info();
-    $("backend-pill").textContent = info.backend;
+    setRaw("backend-pill", info.backend);
     $("backend-pill").classList.remove("error");
     $("app-banner").hidden = true;
-    $("subtitle").textContent = info.name + " · " + info.version;
+    setRaw("subtitle", info.name + " · " + info.version);
 
     // Load the screens' status, now that the bridge is ready.
     loadOverview();
@@ -1236,7 +1331,7 @@ async function loadBackendInfo() {
     loadIsoStatus();
     loadSettings();
   } catch (e) {
-    showBackendError("backend indisponível — recarregue");
+    showBackendError("app.backend_unavailable_reload");
     console.error(e);
   }
 }
@@ -1271,7 +1366,7 @@ const __bootPoll = setInterval(() => {
   // banner. This avoids the false "sem backend" alarm that used to stick at 10s.
   if (__bootTries === 300 && !__bootWarned) {
     __bootWarned = true;
-    showBackendError("backend demorando a conectar — se persistir, recarregue");
+    showBackendError("app.backend_slow");
   }
   if (__bootTries > 1200) clearInterval(__bootPoll);  // truly give up after ~2 min
 }, 100);

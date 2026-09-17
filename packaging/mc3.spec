@@ -29,6 +29,28 @@ if not _check_bundle():
     raise SystemExit(
         "tools_bundle incompleto. Rode antes:  python packaging/make_tools_bundle.py")
 
+# Guarda de DADOS DO USUARIO. O COLLECT la embaixo, com --noconfirm, roda
+# "Removing dir <dist>/MC3 Music Manager" antes de gravar o build novo. So que o
+# app monta o workspace AO LADO do .exe (core._app_root) -- entao quem abriu o
+# executavel direto de dentro do build e preparou o jogo tem ali ~10 GB de
+# extracao, as musicas adicionadas e os BACKUPS. Rebuild = tudo apagado, sem
+# pergunta. Aconteceu de verdade em 2026-09: 12 faixas adicionadas pelo app
+# empacotado quase foram junto num rebuild de rotina.
+# Esta checagem roda antes do COLLECT, entao recusar aqui nao apaga nada.
+_APP_DIR = Path(DISTPATH) / "MC3 Music Manager"   # noqa: F821 - DISTPATH is injected
+_USER_DATA = ("backups", "STREAMS", "ASSETS", "Arquivos da ISO",
+              "ASSETS.DAT", "STREAMS.DAT", "mcstrings02.json", "ISO")
+_found = [name for name in _USER_DATA if (_APP_DIR / name).exists()]
+if _found:
+    raise SystemExit(
+        "\nRECUSADO: ha dados do usuario na pasta que este build APAGARIA:\n"
+        f"    {_APP_DIR}\n"
+        f"    encontrado: {', '.join(_found)}\n"
+        "O PyInstaller remove essa pasta inteira antes de gravar o build novo.\n"
+        "Mova o workspace para fora dela, ou gere em outro lugar com\n"
+        "    --distpath <outra pasta>\n"
+    )
+
 # pywebview pulls in platform backends + .NET glue dynamically; collect_all keeps
 # the EdgeChromium (WebView2) backend from being tree-shaken away.
 wv_datas, wv_binaries, wv_hidden = collect_all("webview")

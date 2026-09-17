@@ -3,24 +3,33 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MC3 Music Manager — Web</title>
+  <title>MC3 Music Manager</title>
   <link rel="icon" href="data:," />
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
+  <!--
+    i18n: todo texto visivel tem uma chave em frontend/locales/*.json.
+      data-i18n="k"             -> textContent
+      data-i18n-md="k"          -> texto com **negrito** (o resto e escapado)
+      data-i18n-placeholder="k" -> placeholder
+      data-i18n-title="k"       -> title + aria-label
+    O texto que ja esta aqui e o portugues, para a tela nunca abrir vazia antes do
+    backend responder. Icones e simbolos ficam FORA das chaves.
+  -->
   <div class="app">
     <!-- Custom title bar (window is frameless). `pywebview-drag-region` is what
          pywebview looks for to let the user drag the window by this strip. -->
     <div class="titlebar pywebview-drag-region">
       <span class="tb-title pywebview-drag-region">MC3 Music Manager</span>
       <div class="tb-controls">
-        <button class="tb-btn" id="btn-win-min" title="Minimizar" aria-label="Minimizar">
+        <button class="tb-btn" id="btn-win-min" title="Minimizar" aria-label="Minimizar" data-i18n-title="app.win_minimize">
           <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><rect x="1" y="5.5" width="10" height="1.1" rx="0.5"/></svg>
         </button>
-        <button class="tb-btn" id="btn-win-max" title="Maximizar" aria-label="Maximizar">
+        <button class="tb-btn" id="btn-win-max" title="Maximizar" aria-label="Maximizar" data-i18n-title="app.win_maximize">
           <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><rect x="1.6" y="1.6" width="8.8" height="8.8" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.1"/></svg>
         </button>
-        <button class="tb-btn tb-close" id="btn-win-close" title="Fechar" aria-label="Fechar">
+        <button class="tb-btn tb-close" id="btn-win-close" title="Fechar" aria-label="Fechar" data-i18n-title="app.win_close">
           <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M2 2 L10 10 M10 2 L2 10" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
         </button>
       </div>
@@ -32,27 +41,26 @@
         <div class="logo">MC3</div>
         <div class="brand-text">
           <h1>Music Manager</h1>
-          <span id="subtitle">Midnight Club 3 · trilha sonora</span>
+          <span id="subtitle" data-i18n="app.subtitle">Midnight Club 3 · trilha sonora</span>
         </div>
       </div>
-      <div class="backend-pill" id="backend-pill">conectando…</div>
+      <div class="backend-pill" id="backend-pill" data-i18n="pill.connecting">conectando…</div>
     </header>
 
     <div class="danger-zone" id="app-banner" hidden style="margin: 12px 24px 0">
-      <span class="tools bad" id="app-banner-text">Não foi possível falar com o backend.</span>
-      <button class="btn ghost small" id="btn-app-reload">↻ Recarregar</button>
+      <span class="tools bad" id="app-banner-text" data-i18n="app.backend_unreachable">Não foi possível falar com o backend.</span>
+      <button class="btn ghost small" id="btn-app-reload">↻ <span data-i18n="app.reload">Recarregar</span></button>
     </div>
 
     <!-- Aparece quando uma tarefa falha: envia o relatório ao dev num clique. -->
     <div class="danger-zone" id="error-report-bar" hidden style="margin: 12px 24px 0; flex-wrap: wrap">
-      <span class="tools bad" id="error-report-text">Ocorreu um erro.</span>
-      <button class="btn ghost small" id="btn-report-send">🐞 Enviar relatório</button>
-      <button class="btn ghost small" id="btn-report-copy">📋 Copiar</button>
+      <span class="tools bad" id="error-report-text" data-i18n="app.error_generic">Ocorreu um erro.</span>
+      <button class="btn ghost small" id="btn-report-send">🐞 <span data-i18n="app.report_send">Enviar relatório</span></button>
+      <button class="btn ghost small" id="btn-report-copy">📋 <span data-i18n="app.report_copy">Copiar</span></button>
       <button class="btn ghost small" id="btn-report-dismiss">✕</button>
     </div>
 
     <main class="content">
-      <!-- Left: nav rail (purely visual for the skeleton) -->
       <nav class="rail">
         <button class="rail-item active" data-target="card-inicio"><span class="dot"></span><span data-i18n="rail.inicio">Início</span></button>
         <button class="rail-item" data-target="card-prepare"><span class="dot"></span><span data-i18n="rail.prepare">Preparar Projeto</span></button>
@@ -63,63 +71,58 @@
         <button class="rail-item" data-target="card-settings"><span class="dot"></span><span data-i18n="rail.settings">Configurações</span></button>
       </nav>
 
-      <!-- Right: panels -->
       <section class="panels">
+        <!-- ======================= INÍCIO ======================= -->
         <div class="card" id="card-inicio">
           <div class="card-head">
-            <h3><span data-i18n="title.inicio">Início</span> <span class="badge readonly">painel</span></h3>
+            <h3><span data-i18n="title.inicio">Início</span> <span class="badge readonly" data-i18n="home.badge">painel</span></h3>
             <span class="tag" id="ov-tag">—</span>
           </div>
-          <p class="muted">
-            Panorama do projeto e o <b>passo a passo</b> do fluxo — do disco original até a ISO final.
-          </p>
+          <p class="muted" data-i18n-md="home.intro">Panorama do projeto e o <b>passo a passo</b> do fluxo — do disco original até a ISO final.</p>
           <div class="stat-row" id="ov-stats"></div>
-          <div class="ov-section-title">Programas necessários no PC</div>
+          <div class="ov-section-title" data-i18n="home.programs">Programas necessários no PC</div>
           <div class="prog-list" id="ov-programs"></div>
-          <div class="ov-section-title">Passo a passo</div>
+          <div class="ov-section-title" data-i18n="home.steps">Passo a passo</div>
           <div class="step-list" id="ov-steps"></div>
         </div>
 
+        <!-- ======================= PREPARAR ======================= -->
         <div class="card" id="card-prepare">
           <div class="card-head">
-            <h3><span data-i18n="title.prepare">Preparar Projeto</span> <span class="badge">passo 1 · fundação</span></h3>
-            <span class="tag" id="pp-status-tag">ocioso</span>
+            <h3><span data-i18n="title.prepare">Preparar Projeto</span> <span class="badge" data-i18n="prep.badge">passo 1 · fundação</span></h3>
+            <span class="tag" id="pp-status-tag" data-i18n="common.idle">ocioso</span>
           </div>
-          <p class="muted">
-            Extrai a ISO do Midnight Club 3 para um <b>workspace editável</b>
-            (<b>ASSETS/</b>, <b>STREAMS/</b>, <b>mcstrings02.json</b>) — é o que as telas
-            de editar precisam para ter dados. Lê a ISO; escreve só em pastas novas.
-          </p>
+          <p class="muted" data-i18n-md="prep.intro">Extrai a ISO do Midnight Club 3 para um <b>workspace editável</b> (<b>ASSETS/</b>, <b>STREAMS/</b>, <b>mcstrings02.json</b>) — é o que as telas de editar precisam para ter dados. Lê a ISO; escreve só em pastas novas.</p>
           <div class="row">
-            <span class="tools" id="pp-tools-status">verificando…</span>
+            <span class="tools" id="pp-tools-status" data-i18n="common.checking">verificando…</span>
           </div>
 
           <div class="row">
-            <button class="btn ghost" id="btn-pick-project-iso">💿 Escolher ISO do jogo…</button>
-            <button class="btn ghost" id="btn-validate-iso" disabled>🔍 Validar ISO</button>
-            <span class="path" id="pp-iso">nenhuma ISO escolhida</span>
+            <button class="btn ghost" id="btn-pick-project-iso">💿 <span data-i18n="prep.pick_iso">Escolher ISO do jogo…</span></button>
+            <button class="btn ghost" id="btn-validate-iso" disabled>🔍 <span data-i18n="prep.validate_iso">Validar ISO</span></button>
+            <span class="path" id="pp-iso" data-i18n="prep.no_iso">nenhuma ISO escolhida</span>
           </div>
           <div class="row">
             <span class="tools" id="pp-validation"></span>
           </div>
 
           <div class="prep-checklist">
-            <div class="prep-item" id="pp-c-gamefiles"><span class="dot"></span>Arquivos da ISO copiados</div>
-            <div class="prep-item" id="pp-c-assets"><span class="dot"></span>ASSETS extraído</div>
-            <div class="prep-item" id="pp-c-streams"><span class="dot"></span>STREAMS extraído</div>
-            <div class="prep-item" id="pp-c-strings"><span class="dot"></span>mcstrings02.json gerado</div>
+            <div class="prep-item" id="pp-c-gamefiles"><span class="dot"></span><span data-i18n="prep.check_gamefiles">Arquivos da ISO copiados</span></div>
+            <div class="prep-item" id="pp-c-assets"><span class="dot"></span><span data-i18n="prep.check_assets">ASSETS extraído</span></div>
+            <div class="prep-item" id="pp-c-streams"><span class="dot"></span><span data-i18n="prep.check_streams">STREAMS extraído</span></div>
+            <div class="prep-item" id="pp-c-strings"><span class="dot"></span><span data-i18n="prep.check_strings">mcstrings02.json gerado</span></div>
           </div>
 
           <div class="row">
-            <button class="btn ghost" id="btn-pp-copy">1 · Copiar arquivos da ISO</button>
-            <button class="btn ghost" id="btn-pp-prepare">2 · Preparar arquivos</button>
-            <button class="btn primary" id="btn-pp-all">⚙ Preparar tudo automaticamente</button>
+            <button class="btn ghost" id="btn-pp-copy" data-i18n="prep.btn_copy">1 · Copiar arquivos da ISO</button>
+            <button class="btn ghost" id="btn-pp-prepare" data-i18n="prep.btn_prepare">2 · Preparar arquivos</button>
+            <button class="btn primary" id="btn-pp-all">⚙ <span data-i18n="prep.btn_all">Preparar tudo automaticamente</span></button>
           </div>
 
           <div class="danger-zone" id="pp-danger" hidden>
             <label class="confirm">
               <input type="checkbox" id="pp-confirm" />
-              O workspace já está preparado — entendo que reimportar <b>apaga a extração atual</b>
+              <span data-i18n-md="prep.reimport_confirm">O workspace já está preparado — entendo que reimportar <b>apaga a extração atual</b></span>
             </label>
           </div>
 
@@ -128,180 +131,169 @@
               <div class="progress-fill" id="pp-progress-fill" style="width:0%"></div>
             </div>
             <span class="progress-label" id="pp-progress-label">0%</span>
-            <button class="btn ghost small" id="btn-pp-cancel" hidden>✕ Cancelar</button>
+            <button class="btn ghost small" id="btn-pp-cancel" hidden>✕ <span data-i18n="common.cancel">Cancelar</span></button>
           </div>
           <div class="console" id="pp-console" aria-live="polite">
-            <div class="console-line muted">— log da preparação aparece aqui —</div>
+            <div class="console-line muted" data-i18n="prep.log_placeholder">— o log da preparação aparece aqui —</div>
           </div>
 
-          <div class="reset-sep">Recomeçar do zero</div>
-          <p class="muted small">
-            Apaga a <b>extração atual</b> (Arquivos da ISO, ASSETS, STREAMS, mcstrings)
-            para você começar de novo e escolher <b>outra ISO</b>. Os <b>backups são preservados</b>
-            e a ISO já gerada não é tocada.
-          </p>
+          <div class="reset-sep" data-i18n="prep.reset_title">Recomeçar do zero</div>
+          <p class="muted small" data-i18n-md="prep.reset_intro">Apaga a <b>extração atual</b> (Arquivos da ISO, ASSETS, STREAMS, mcstrings) para você começar de novo e escolher <b>outra ISO</b>. Os <b>backups são preservados</b> e a ISO já gerada não é tocada.</p>
           <div class="danger-zone reset-zone">
             <label class="confirm">
               <input type="checkbox" id="pp-reset-confirm" />
-              Entendo que isto <b>apaga a extração atual</b> do workspace (backups preservados)
+              <span data-i18n-md="prep.reset_confirm">Entendo que isto <b>apaga a extração atual</b> do workspace (backups preservados)</span>
             </label>
-            <button class="btn danger" id="btn-pp-reset" disabled>♻ Resetar projeto</button>
+            <button class="btn danger" id="btn-pp-reset" disabled>♻ <span data-i18n="prep.reset_btn">Resetar projeto</span></button>
           </div>
         </div>
 
+        <!-- ======================= ADICIONAR ======================= -->
         <div class="card" id="card-add">
           <div class="card-head">
-            <h3><span data-i18n="title.add">Adicionar música</span> <span class="badge">passo 2</span> <span class="badge danger-badge">destrutivo</span></h3>
-            <span class="tag" id="add-status-tag">ocioso</span>
+            <h3><span data-i18n="title.add">Adicionar música</span> <span class="badge" data-i18n="add.badge">passo 2</span> <span class="badge danger-badge" data-i18n="common.destructive">destrutivo</span></h3>
+            <span class="tag" id="add-status-tag" data-i18n="common.idle">ocioso</span>
           </div>
-          <p class="muted">
-            Escolha o <b>MP3/FLAC/WAV</b> direto — a <b>conversão para RSM é automática</b>
-            ao adicionar, você <b>não precisa converter antes</b>. Instala a faixa no jogo
-            (converte, adiciona nas <b>playlists</b> e nas <b>strings</b>, recompila o STRTBL)
-            e faz <b>backup automático</b> antes de qualquer alteração.
-          </p>
+          <p class="muted" data-i18n-md="add.intro">Escolha o <b>MP3/FLAC/WAV</b> direto — a <b>conversão para RSM é automática</b> ao adicionar, você <b>não precisa converter antes</b>. Instala a faixa no jogo (converte, adiciona nas <b>playlists</b> e nas <b>strings</b>, recompila o STRTBL) e faz <b>backup automático</b> antes de qualquer alteração.</p>
           <div class="row">
-            <span class="tools" id="add-tools-status">verificando…</span>
+            <span class="tools" id="add-tools-status" data-i18n="common.checking">verificando…</span>
           </div>
 
           <div class="mode-switch">
-            <button class="mode-btn active" id="mode-single">🎵 Uma música</button>
-            <button class="mode-btn" id="mode-batch">🎶 Lote</button>
+            <button class="mode-btn active" id="mode-single">🎵 <span data-i18n="add.mode_single">Uma música</span></button>
+            <button class="mode-btn" id="mode-batch">🎶 <span data-i18n="add.mode_batch">Lote</span></button>
           </div>
 
           <div id="add-single">
             <div class="row">
-              <button class="btn ghost" id="btn-pick-add">🎵 Escolher áudio…</button>
-              <button class="btn ghost" id="btn-add-listen" disabled>▶ Ouvir</button>
-              <span class="path" id="add-path">nenhum arquivo selecionado</span>
+              <button class="btn ghost" id="btn-pick-add">🎵 <span data-i18n="add.pick_audio">Escolher áudio…</span></button>
+              <button class="btn ghost" id="btn-add-listen" disabled>▶ <span data-i18n="add.listen">Ouvir</span></button>
+              <span class="path" id="add-path" data-i18n="add.no_file">nenhum arquivo selecionado</span>
             </div>
             <div class="row">
               <span class="path" id="add-detected"></span>
             </div>
 
             <div class="form-grid">
-              <label class="field">Título
+              <!-- os placeholders MusicName/SingerName NAO se traduzem: sao os valores
+                   que o app grava no jogo quando o campo fica vazio -->
+              <label class="field"><span data-i18n="add.field_title">Título</span>
                 <input id="add-title" type="text" placeholder="MusicName" autocomplete="off" />
               </label>
-              <label class="field">Artista
+              <label class="field"><span data-i18n="add.field_artist">Artista</span>
                 <input id="add-artist" type="text" placeholder="SingerName" autocomplete="off" />
               </label>
-              <label class="field">Gênero
+              <label class="field"><span data-i18n="add.field_genre">Gênero</span>
                 <select id="add-genre"></select>
               </label>
-              <label class="field">Nome interno (auto)
-                <input id="add-asset" type="text" placeholder="(automático)" autocomplete="off" />
+              <label class="field"><span data-i18n="add.field_asset">Nome interno (auto)</span>
+                <input id="add-asset" type="text" placeholder="(automático)" data-i18n-placeholder="add.asset_auto" autocomplete="off" />
               </label>
             </div>
 
             <div class="add-preview" id="add-preview">
-              <div class="kv">Chave mcstrings: <b id="prev-key">--</b></div>
-              <div class="kv">Entrada de playlist: <b id="prev-entry">--</b></div>
-              <div class="kv">Destino .rsm: <b id="prev-target">--</b></div>
+              <div class="kv"><span data-i18n="add.preview_key">Chave mcstrings:</span> <b id="prev-key">--</b></div>
+              <div class="kv"><span data-i18n="add.preview_entry">Entrada de playlist:</span> <b id="prev-entry">--</b></div>
+              <div class="kv"><span data-i18n="add.preview_target">Destino .rsm:</span> <b id="prev-target">--</b></div>
             </div>
           </div>
 
           <div id="add-batch" hidden>
             <div class="row">
-              <button class="btn ghost" id="btn-pick-batch">🎶 Escolher vários…</button>
-              <span class="path" id="batch-count">nenhum arquivo selecionado</span>
+              <button class="btn ghost" id="btn-pick-batch">🎶 <span data-i18n="add.pick_batch">Escolher vários…</span></button>
+              <span class="path" id="batch-count" data-i18n="add.no_file">nenhum arquivo selecionado</span>
             </div>
             <div class="row bulk-genre" id="batch-bulk" hidden>
-              <span class="tools">Aplicar a todas as faixas:</span>
+              <span class="tools" data-i18n="add.bulk_label">Aplicar a todas as faixas:</span>
               <select id="batch-bulk-genre" class="rm-search" style="flex:0 0 auto; max-width:190px"></select>
-              <button class="btn ghost small" id="btn-batch-bulk-apply">✔ Aplicar gênero a todas</button>
+              <button class="btn ghost small" id="btn-batch-bulk-apply">✔ <span data-i18n="add.bulk_apply">Aplicar gênero a todas</span></button>
               <span class="path" id="batch-bulk-info"></span>
             </div>
             <div class="batch-list" id="batch-rows">
-              <div class="console-line muted">— escolha vários arquivos para editar cada faixa —</div>
+              <div class="console-line muted" data-i18n="add.batch_placeholder">— escolha vários arquivos para editar cada faixa —</div>
             </div>
           </div>
 
           <div class="playlists-head">
-            <span class="tools">Playlists de destino</span>
-            <button class="btn ghost small" id="btn-pl-all">Padrão completo</button>
-            <button class="btn ghost small" id="btn-pl-genre">Só gênero</button>
-            <button class="btn ghost small" id="btn-pl-cities">Só cidades</button>
-            <button class="btn ghost small" id="btn-pl-clear">Limpar</button>
-            <span class="path" id="pl-count">0 selecionada(s)</span>
+            <span class="tools" data-i18n="add.playlists_label">Playlists de destino</span>
+            <button class="btn ghost small" id="btn-pl-all" data-i18n="add.pl_all">Padrão completo</button>
+            <button class="btn ghost small" id="btn-pl-genre" data-i18n="add.pl_genre">Só gênero</button>
+            <button class="btn ghost small" id="btn-pl-cities" data-i18n="add.pl_cities">Só cidades</button>
+            <button class="btn ghost small" id="btn-pl-clear" data-i18n="common.clear">Limpar</button>
+            <span class="path" id="pl-count" data-i18n="common.selected_count" data-i18n-args='{"n":0}'>0 selecionada(s)</span>
           </div>
           <div class="playlists" id="add-playlists">
-            <div class="console-line muted">— nenhuma playlist (workspace sem game files) —</div>
+            <div class="console-line muted" data-i18n="add.pl_none_available">— nenhuma playlist (workspace sem arquivos do jogo) —</div>
           </div>
 
           <div class="pl-selected-box">
             <div class="pl-selected-head">
-              <span class="tools">Selecionadas</span>
+              <span class="tools" data-i18n="add.selected">Selecionadas</span>
               <span class="path" id="pl-selected-count">0</span>
             </div>
             <div class="pl-selected" id="pl-selected"></div>
           </div>
 
-          <p class="muted small" style="margin-top:8px">
-            <b>Padrão completo</b> = cobertura segura (todas). <b>Só gênero</b> = as playlists de
-            corrida do estilo. <b>Só cidades</b> = os blocos gerais de cada mapa.
-          </p>
+          <p class="muted small" style="margin-top:8px" data-i18n-md="add.presets_help"><b>Padrão completo</b> = cobertura segura (todas). <b>Só gênero</b> = as playlists de corrida do estilo. <b>Só cidades</b> = os blocos gerais de cada mapa.</p>
 
           <div class="progress-wrap">
             <div class="progress" id="add-progress">
               <div class="progress-fill" id="add-progress-fill" style="width:0%"></div>
             </div>
             <span class="progress-label" id="add-progress-label">0%</span>
-            <button class="btn ghost small" id="btn-add-cancel" hidden>✕ Cancelar</button>
+            <button class="btn ghost small" id="btn-add-cancel" hidden>✕ <span data-i18n="common.cancel">Cancelar</span></button>
           </div>
 
           <div class="danger-zone">
             <label class="confirm">
               <input type="checkbox" id="add-confirm" />
-              Entendo que isto <b>altera o workspace</b> (há backup automático)
+              <span data-i18n-md="add.confirm">Entendo que isto <b>altera o workspace</b> (há backup automático)</span>
             </label>
             <label class="confirm confirm-inline">
-              <input type="checkbox" id="add-overwrite" /> sobrescrever se já existir
+              <input type="checkbox" id="add-overwrite" /> <span data-i18n="add.overwrite">sobrescrever se já existir</span>
             </label>
-            <button class="btn danger" id="btn-add" disabled>➕ Adicionar música</button>
-            <button class="btn danger" id="btn-add-batch" disabled hidden>➕ Adicionar lote</button>
+            <button class="btn danger" id="btn-add" disabled>➕ <span data-i18n="add.btn_add">Adicionar música</span></button>
+            <button class="btn danger" id="btn-add-batch" disabled hidden>➕ <span data-i18n="add.btn_add_batch">Adicionar lote</span></button>
           </div>
 
           <div class="console" id="add-console" aria-live="polite">
-            <div class="console-line muted">— log da adição aparece aqui —</div>
+            <div class="console-line muted" data-i18n="add.log_placeholder">— o log da adição aparece aqui —</div>
           </div>
         </div>
 
+        <!-- ======================= REMOVER ======================= -->
         <div class="card" id="card-remove">
           <div class="card-head">
-            <h3><span data-i18n="title.remove">Remover música</span> <span class="badge danger-badge">destrutivo</span></h3>
-            <span class="tag" id="rm-status-tag">ocioso</span>
+            <h3><span data-i18n="title.remove">Remover música</span> <span class="badge danger-badge" data-i18n="common.destructive">destrutivo</span></h3>
+            <span class="tag" id="rm-status-tag" data-i18n="common.idle">ocioso</span>
           </div>
-          <p class="muted">
-            Remove faixas já instaladas: apaga o <b>.rsm</b>, tira das <b>playlists</b> e das
-            <b>strings</b> (cada ação é opcional). Faz <b>backup automático</b> antes.
-          </p>
+          <p class="muted" data-i18n-md="rm.intro">Remove faixas já instaladas: apaga o <b>.rsm</b>, tira das <b>playlists</b> e das <b>strings</b> (cada ação é opcional). Faz <b>backup automático</b> antes.</p>
           <div class="row">
-            <span class="tools" id="rm-tools-status">verificando…</span>
+            <span class="tools" id="rm-tools-status" data-i18n="common.checking">verificando…</span>
             <span class="path" id="rm-stats"></span>
           </div>
 
           <div class="row">
-            <button class="btn ghost small" id="btn-rm-refresh">🔄 Atualizar</button>
+            <button class="btn ghost small" id="btn-rm-refresh">🔄 <span data-i18n="rm.refresh">Atualizar</span></button>
             <select id="rm-genre-filter" class="rm-search" style="flex:0 0 auto; max-width:190px">
-              <option value="__all__">Todos os gêneros</option>
+              <option value="__all__" data-i18n="rm.all_genres">Todos os gêneros</option>
             </select>
-            <input id="rm-search" class="rm-search" type="text" placeholder="buscar nome…" autocomplete="off" />
-            <button class="btn ghost small" id="btn-rm-all">Marcar visíveis</button>
-            <button class="btn ghost small" id="btn-rm-none">Limpar</button>
-            <span class="path" id="rm-count">0 selecionada(s)</span>
+            <input id="rm-search" class="rm-search" type="text" placeholder="buscar nome…" data-i18n-placeholder="rm.search" autocomplete="off" />
+            <button class="btn ghost small" id="btn-rm-all" data-i18n="rm.mark_visible">Marcar visíveis</button>
+            <button class="btn ghost small" id="btn-rm-none" data-i18n="common.clear">Limpar</button>
+            <span class="path" id="rm-count" data-i18n="common.selected_count" data-i18n-args='{"n":0}'>0 selecionada(s)</span>
           </div>
 
           <div class="song-list" id="rm-songs">
-            <div class="console-line muted">— clique em "Atualizar lista" (precisa do workspace preparado) —</div>
+            <div class="console-line muted" data-i18n="rm.placeholder">— clique em Atualizar (precisa do workspace preparado) —</div>
           </div>
 
           <div class="row rm-options">
-            <span class="tools">Remover:</span>
-            <label class="confirm confirm-inline"><input type="checkbox" id="rm-opt-audio" checked /> áudio (.rsm)</label>
-            <label class="confirm confirm-inline"><input type="checkbox" id="rm-opt-playlists" checked /> playlists</label>
-            <label class="confirm confirm-inline"><input type="checkbox" id="rm-opt-strings" checked /> strings</label>
-            <label class="confirm confirm-inline"><input type="checkbox" id="rm-opt-rebuild" /> recompilar depois</label>
+            <span class="tools" data-i18n="rm.remove_label">Remover:</span>
+            <label class="confirm confirm-inline"><input type="checkbox" id="rm-opt-audio" checked /> <span data-i18n="common.opt_audio">áudio (.rsm)</span></label>
+            <label class="confirm confirm-inline"><input type="checkbox" id="rm-opt-playlists" checked /> <span data-i18n="common.opt_playlists">playlists</span></label>
+            <label class="confirm confirm-inline"><input type="checkbox" id="rm-opt-strings" checked /> <span data-i18n="common.opt_strings">strings</span></label>
+            <label class="confirm confirm-inline"><input type="checkbox" id="rm-opt-rebuild" /> <span data-i18n="rm.rebuild_after">recompilar depois</span></label>
           </div>
 
           <div class="progress-wrap">
@@ -309,99 +301,91 @@
               <div class="progress-fill" id="rm-progress-fill" style="width:0%"></div>
             </div>
             <span class="progress-label" id="rm-progress-label">0%</span>
-            <button class="btn ghost small" id="btn-rm-cancel" hidden>✕ Cancelar</button>
+            <button class="btn ghost small" id="btn-rm-cancel" hidden>✕ <span data-i18n="common.cancel">Cancelar</span></button>
           </div>
 
           <div class="danger-zone">
             <label class="confirm">
               <input type="checkbox" id="rm-confirm" />
-              Entendo que isto <b>apaga arquivos</b> do workspace (há backup automático)
+              <span data-i18n-md="rm.confirm">Entendo que isto <b>apaga arquivos</b> do workspace (há backup automático)</span>
             </label>
-            <button class="btn danger" id="btn-rm-remove" disabled>🗑 Remover selecionadas</button>
+            <button class="btn danger" id="btn-rm-remove" disabled>🗑 <span data-i18n="rm.btn_remove">Remover selecionadas</span></button>
           </div>
 
           <div class="console" id="rm-console" aria-live="polite">
-            <div class="console-line muted">— log da remoção aparece aqui —</div>
+            <div class="console-line muted" data-i18n="rm.log_placeholder">— o log da remoção aparece aqui —</div>
           </div>
         </div>
 
+        <!-- ======================= RECOMPILAR ======================= -->
         <div class="card" id="card-rebuild">
           <div class="card-head">
             <h3 data-i18n="title.rebuild">Recompilar DATs</h3>
-            <span class="tag" id="rb-status-tag">ocioso</span>
+            <span class="tag" id="rb-status-tag" data-i18n="common.idle">ocioso</span>
           </div>
-          <p class="muted">
-            Reempacota as pastas editadas do jogo nos arquivos <b>STREAMS.DAT</b>
-            (hash_build) e <b>ASSETS.DAT</b> (dave) e <b>publica</b> em
-            <b>Arquivos da ISO</b>. Roda as ferramentas PS2 reais.
-          </p>
+          <p class="muted" data-i18n-md="rb.intro">Reempacota as pastas editadas do jogo nos arquivos <b>STREAMS.DAT</b> (hash_build) e <b>ASSETS.DAT</b> (dave) e <b>publica</b> em <b>Arquivos da ISO</b>. Roda as ferramentas PS2 reais.</p>
           <div class="row">
-            <span class="tools" id="rb-tools-status">verificando…</span>
+            <span class="tools" id="rb-tools-status" data-i18n="common.checking">verificando…</span>
           </div>
           <div class="row">
             <button class="btn ghost" id="btn-rb-streams" disabled>STREAMS.DAT</button>
             <button class="btn ghost" id="btn-rb-assets" disabled>ASSETS.DAT</button>
-            <button class="btn primary" id="btn-rb-all" disabled>⚙ Recompilar tudo</button>
+            <button class="btn primary" id="btn-rb-all" disabled>⚙ <span data-i18n="rb.btn_all">Recompilar tudo</span></button>
           </div>
           <div class="progress-wrap">
             <div class="progress" id="rb-progress">
               <div class="progress-fill" id="rb-progress-fill" style="width:0%"></div>
             </div>
             <span class="progress-label" id="rb-progress-label">0%</span>
-            <button class="btn ghost small" id="btn-rb-cancel" hidden>✕ Cancelar</button>
+            <button class="btn ghost small" id="btn-rb-cancel" hidden>✕ <span data-i18n="common.cancel">Cancelar</span></button>
           </div>
           <div class="console" id="rb-console" aria-live="polite">
-            <div class="console-line muted">— log da recompilação aparece aqui —</div>
+            <div class="console-line muted" data-i18n="rb.log_placeholder">— o log da recompilação aparece aqui —</div>
           </div>
         </div>
 
+        <!-- ======================= BACKUP ======================= -->
         <div class="card" id="card-backup">
           <div class="card-head">
-            <h3><span data-i18n="title.backup">Backup</span> <span class="badge readonly">segurança</span></h3>
-            <span class="tag" id="bk-status-tag">ocioso</span>
+            <h3><span data-i18n="title.backup">Backup</span> <span class="badge readonly" data-i18n="bk.badge">segurança</span></h3>
+            <span class="tag" id="bk-status-tag" data-i18n="common.idle">ocioso</span>
           </div>
-          <p class="muted">
-            Salva uma cópia dos arquivos-chave (DATs, playlists, strings) e permite
-            <b>desfazer</b> restaurando o último backup. É a rede de segurança antes
-            de qualquer alteração destrutiva.
-          </p>
+          <p class="muted" data-i18n-md="bk.intro">Salva uma cópia dos arquivos-chave (DATs, playlists, strings) e permite <b>desfazer</b> restaurando o último backup. É a rede de segurança antes de qualquer alteração destrutiva.</p>
           <div class="row">
-            <span class="tools" id="bk-latest">verificando backups…</span>
+            <span class="tools" id="bk-latest" data-i18n="bk.checking">verificando backups…</span>
           </div>
           <div class="row">
-            <button class="btn ghost" id="btn-bk-create">💾 Criar backup agora</button>
+            <button class="btn ghost" id="btn-bk-create">💾 <span data-i18n="bk.create">Criar backup agora</span></button>
           </div>
           <div class="danger-zone">
             <label class="confirm">
               <input type="checkbox" id="bk-confirm" />
-              Entendo que restaurar <b>sobrescreve e apaga</b> arquivos do workspace
+              <span data-i18n-md="bk.confirm">Entendo que restaurar <b>sobrescreve e apaga</b> arquivos do workspace</span>
             </label>
-            <button class="btn danger" id="btn-bk-restore" disabled>↩ Restaurar último backup</button>
+            <button class="btn danger" id="btn-bk-restore" disabled>↩ <span data-i18n="bk.restore">Restaurar último backup</span></button>
           </div>
           <div class="console" id="bk-console" aria-live="polite">
-            <div class="console-line muted">— log de backup aparece aqui —</div>
+            <div class="console-line muted" data-i18n="bk.log_placeholder">— o log de backup aparece aqui —</div>
           </div>
         </div>
 
+        <!-- ======================= GERAR ISO ======================= -->
         <div class="card" id="card-iso-out">
           <div class="card-head">
-            <h3><span data-i18n="title.iso">Gerar ISO final</span> <span class="badge">passo final</span></h3>
-            <span class="tag" id="gi-status-tag">ocioso</span>
+            <h3><span data-i18n="title.iso">Gerar ISO final</span> <span class="badge" data-i18n="iso.badge">passo final</span></h3>
+            <span class="tag" id="gi-status-tag" data-i18n="common.idle">ocioso</span>
           </div>
-          <p class="muted">
-            Recompila os DATs e monta a <b>.iso</b> final jogável (via <b>ImgBurn</b>) a partir de
-            <b>Arquivos da ISO</b>. Grava um arquivo novo — não altera as pastas de edição.
-          </p>
+          <p class="muted" data-i18n-md="iso.intro">Recompila os DATs e monta a <b>.iso</b> final jogável (via <b>ImgBurn</b>) a partir de <b>Arquivos da ISO</b>. Grava um arquivo novo — não altera as pastas de edição.</p>
           <div class="row">
-            <span class="tools" id="gi-tools-status">verificando…</span>
+            <span class="tools" id="gi-tools-status" data-i18n="common.checking">verificando…</span>
           </div>
 
           <div class="row">
-            <button class="btn ghost" id="btn-gi-output">💾 Escolher onde salvar…</button>
+            <button class="btn ghost" id="btn-gi-output">💾 <span data-i18n="iso.pick_output">Escolher onde salvar…</span></button>
             <span class="path" id="gi-output">—</span>
           </div>
           <div class="row">
-            <label class="field field-inline">Rótulo do volume
+            <label class="field field-inline"><span data-i18n="iso.volume_label">Rótulo do volume</span>
               <input id="gi-label" type="text" value="MClub" autocomplete="off" />
             </label>
           </div>
@@ -411,76 +395,70 @@
               <div class="progress-fill" id="gi-progress-fill" style="width:0%"></div>
             </div>
             <span class="progress-label" id="gi-progress-label">0%</span>
-            <button class="btn ghost small" id="btn-gi-cancel" hidden>✕ Cancelar</button>
+            <button class="btn ghost small" id="btn-gi-cancel" hidden>✕ <span data-i18n="common.cancel">Cancelar</span></button>
           </div>
 
           <div class="row">
-            <button class="btn primary" id="btn-gi-generate" disabled>⚙ Gerar ISO final</button>
+            <button class="btn primary" id="btn-gi-generate" disabled>⚙ <span data-i18n="iso.generate">Gerar ISO final</span></button>
           </div>
 
           <div class="console" id="gi-console" aria-live="polite">
-            <div class="console-line muted">— log da geração aparece aqui —</div>
+            <div class="console-line muted" data-i18n="iso.log_placeholder">— o log da geração aparece aqui —</div>
           </div>
         </div>
 
+        <!-- ======================= CONFIGURAÇÕES ======================= -->
         <div class="card" id="card-settings">
           <div class="card-head">
             <h3 data-i18n="title.settings">Configurações</h3>
-            <span class="tag" id="settings-tag">preferências</span>
+            <span class="tag" id="settings-tag" data-i18n="settings.badge">preferências</span>
           </div>
-          <p class="muted">
-            Ferramentas do PC e os padrões do fluxo de edição. As escolhas ficam
-            <b>salvas</b> e voltam na próxima vez que você abrir o app.
-          </p>
+          <p class="muted" data-i18n-md="settings.intro">Idioma, ferramentas do PC e os padrões do fluxo de edição. As escolhas ficam <b>salvas</b> e voltam na próxima vez que você abrir o app.</p>
 
-          <!-- Troca de idioma OCULTA até a tradução ficar pronta. Quem liga/desliga
-               é I18N_ENABLED em js/app.js (fonte única) — o app.js marca/desmarca o
-               `hidden` daqui no boot. Não apague este bloco: as tabelas, o
-               get_i18n/set_language e os data-i18n continuam funcionando; falta só
-               traduzir o resto das strings. -->
-          <div id="settings-language-block" hidden>
-            <div class="ov-section-title" data-i18n="settings.language">Idioma</div>
-            <div class="row">
-              <label class="field field-inline"><span data-i18n="settings.lang_label">Idioma da interface</span>
-                <select id="settings-language">
-                  <option value="pt-BR">Português (Brasil)</option>
-                  <option value="en">English</option>
-                  <option value="es">Español</option>
-                </select>
-              </label>
-            </div>
+          <div class="ov-section-title" data-i18n="settings.language">Idioma</div>
+          <div class="row">
+            <label class="field field-inline"><span data-i18n="settings.lang_label">Idioma da interface</span>
+              <!-- Nomes no PROPRIO idioma (padrao de seletor de idioma): quem nao le
+                   o idioma atual ainda acha o seu. Sao os 6 idiomas do jogo + pt-BR. -->
+              <select id="settings-language">
+                <option value="pt-BR" lang="pt-BR">Português (Brasil)</option>
+                <option value="en" lang="en">English</option>
+                <option value="es" lang="es">Español</option>
+                <option value="fr" lang="fr">Français</option>
+                <option value="de" lang="de">Deutsch</option>
+                <option value="it" lang="it">Italiano</option>
+                <option value="ja" lang="ja">日本語</option>
+              </select>
+            </label>
           </div>
 
           <div class="ov-section-title" data-i18n="settings.tools">Ferramentas do PC</div>
           <div class="prog-list" id="settings-programs">
-            <div class="console-line muted">— status das ferramentas aparece aqui —</div>
+            <div class="console-line muted" data-i18n="settings.tools_placeholder">— o status das ferramentas aparece aqui —</div>
           </div>
 
           <div class="ov-section-title" data-i18n="settings.prefs">Preferências do fluxo</div>
           <div class="row">
-            <label class="field field-inline">Nome do disco final (rótulo do volume)
+            <label class="field field-inline"><span data-i18n="settings.volume_label">Nome do disco final (rótulo do volume)</span>
               <input id="settings-volume" type="text" placeholder="MClub" autocomplete="off" />
             </label>
           </div>
           <div class="row rm-options">
-            <span class="tools">Ao remover, por padrão:</span>
-            <label class="confirm confirm-inline"><input type="checkbox" id="settings-remove-audio" /> áudio (.rsm)</label>
-            <label class="confirm confirm-inline"><input type="checkbox" id="settings-remove-playlists" /> playlists</label>
-            <label class="confirm confirm-inline"><input type="checkbox" id="settings-remove-strings" /> strings</label>
+            <span class="tools" data-i18n="settings.remove_defaults">Ao remover, por padrão:</span>
+            <label class="confirm confirm-inline"><input type="checkbox" id="settings-remove-audio" /> <span data-i18n="common.opt_audio">áudio (.rsm)</span></label>
+            <label class="confirm confirm-inline"><input type="checkbox" id="settings-remove-playlists" /> <span data-i18n="common.opt_playlists">playlists</span></label>
+            <label class="confirm confirm-inline"><input type="checkbox" id="settings-remove-strings" /> <span data-i18n="common.opt_strings">strings</span></label>
           </div>
           <div class="row rm-options">
-            <span class="tools">Recompilar automaticamente:</span>
-            <label class="confirm confirm-inline"><input type="checkbox" id="settings-rebuild-remove" /> depois de remover</label>
+            <span class="tools" data-i18n="settings.auto_rebuild">Recompilar automaticamente:</span>
+            <label class="confirm confirm-inline"><input type="checkbox" id="settings-rebuild-remove" /> <span data-i18n="settings.after_remove">depois de remover</span></label>
           </div>
 
           <div class="ov-section-title" data-i18n="settings.support">Suporte</div>
-          <p class="muted small">
-            Deu algum erro? Isto abre um e-mail <b>já preenchido</b> (com os diagnósticos do app +
-            o último erro) para o desenvolvedor — você revisa e envia. <b>Nada é enviado sem você mandar.</b>
-          </p>
+          <p class="muted small" data-i18n-md="settings.support_intro">Deu algum erro? Isto abre um e-mail <b>já preenchido</b> (com os diagnósticos do app + o último erro) para o desenvolvedor — você revisa e envia. <b>Nada é enviado sem você mandar.</b></p>
           <div class="row">
-            <button class="btn ghost small" id="btn-report-send2">🐞 Enviar relatório de erro</button>
-            <button class="btn ghost small" id="btn-report-copy2">📋 Copiar relatório</button>
+            <button class="btn ghost small" id="btn-report-send2">🐞 <span data-i18n="settings.report_send">Enviar relatório de erro</span></button>
+            <button class="btn ghost small" id="btn-report-copy2">📋 <span data-i18n="settings.report_copy">Copiar relatório</span></button>
             <span class="path" id="report-info"></span>
           </div>
           <textarea id="report-text" class="report-box" readonly hidden></textarea>
@@ -490,10 +468,10 @@
               <div class="progress-fill" id="inst-progress-fill" style="width:0%"></div>
             </div>
             <span class="progress-label" id="inst-progress-label">0%</span>
-            <button class="btn ghost small" id="btn-inst-cancel" hidden>✕ Cancelar</button>
+            <button class="btn ghost small" id="btn-inst-cancel" hidden>✕ <span data-i18n="common.cancel">Cancelar</span></button>
           </div>
           <div class="console" id="settings-console" aria-live="polite">
-            <div class="console-line muted">— log de instalação de ferramentas aparece aqui —</div>
+            <div class="console-line muted" data-i18n="settings.install_log_placeholder">— o log de instalação de ferramentas aparece aqui —</div>
           </div>
         </div>
       </section>

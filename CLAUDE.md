@@ -128,19 +128,8 @@ Um "walking skeleton" + o **primeiro recurso real** funcionando ponta a ponta:
     `overview()` enriquece `programs` com `kind`/`installable`/`download_url`; `Api.install_tool`
     (canal `inst_*`) + `open_download_page`; botão **Instalar**/**Abrir página** por programa faltando
     no Início E em Configurações (`renderPrograms`).
-  - **Multi-idioma pt/en/es:** `frontend/locales/{pt,en,es}.json` (chaves estáveis; pt=fonte);
-    `core.load_translations` + `Api.get_i18n`/`set_language` (persiste em options, `self._i18n` seria
-    privado); `app.js` `I18N`/`t(key)`/`applyStaticTranslations()` via `data-i18n`; seletor em
-    Configurações troca **ao vivo** (rail + títulos de card + rótulos das Configurações).
-    🔒 **O SELETOR ESTÁ OCULTO** — decisão do dono: não expor a troca de idioma enquanto a
-    tradução não acabar. As tabelas cobrem **20 chaves** (trilho + rótulos de Configurações);
-    todo o resto — status, erros, botões dentro dos cards e **todas** as mensagens do Python —
-    é PT-BR fixo no código, então escolher "English" entregava um app ~95% em português.
-    Liga/desliga por **`I18N_ENABLED` em `frontend/js/app.js`** (fonte única: ele revela o
-    `#settings-language-block` e volta a respeitar o idioma salvo). Enquanto `false`, a tela
-    renderiza sempre em pt-BR e a preferência salva em `options.json` fica **intacta**, para
-    ninguém que já tivesse escolhido "English" ficar preso numa tela meio traduzida.
-    A maquinaria inteira segue no lugar e testada — falta só traduzir a cauda longa.
+  - **🌐 Multi-idioma — 7 idiomas, 100% da interface e do backend.** Ver a seção
+    "Internacionalização" abaixo.
 - **Fase 4 — EMPACOTADO (PyInstaller + Inno) ✅**: `packaging/mc3.spec` (**onedir**, não onefile —
   tools/ tem 115 MB e o onefile re-extrairia tudo pro temp a cada abertura) + `packaging/mc3.iss`
   → `build_out/installer/MC3_Music_Manager_Setup.exe` (**90 MB**; instalado = 241 MB).
@@ -195,6 +184,58 @@ Um "walking skeleton" + o **primeiro recurso real** funcionando ponta a ponta:
   agora roda via `_tool_command` (o `.py` sem `.exe` executava sem interpretador → quebrava);
   (2) restaurado o fallback `.wav`-sem-ffmpeg → rstm direto; (3) `_make_writable()` limpa o
   bit somente-leitura antes de sobrescrever `.rsm`/`.play`/`.strtbl`/`.DAT` e no restore.
+
+## 🌐 Internacionalização (i18n)
+
+**Idiomas:** pt-BR (fonte) + **en, es, fr, de, it, ja** — exatamente os 6 da tabela de textos do
+próprio jogo (`mcstrings02.strtbl`, colunas `Language 00..05`). Critério: quem joga MC3 DUB
+Edition Remix joga num deles. Inglês é o idioma de reserva.
+
+**Um catálogo por idioma** em `frontend/locales/{pt,en,es,fr,de,it,ja}.json` (chave plana →
+texto), **compartilhado pela tela e pelo Python**. ~380 chaves, prefixadas por área
+(`add.*`, `err.*`, `log.*`, `progress.*`...). `pt.json` é a fonte; os outros têm de ter
+exatamente as mesmas chaves.
+
+**Backend:** `core.tr(key, **params)` — tudo que o Python manda para a tela (erros, log,
+progresso, rótulos do painel, filtros da janela "Abrir arquivo") sai traduzido. Cadeia de
+reserva: idioma atual → en → pt-BR → a própria chave (chave crua na tela = tradução faltando,
+visível de propósito). `{param}` sem valor fica à vista em vez de explodir como `str.format`.
+
+**Frontend:** `t(key, params)`; `setText(el, key, params, icon)` **grava a chave no
+elemento**, e `applyTranslations()` re-renderiza todos eles — é isso que faz a troca de idioma
+ser **ao vivo**, inclusive em status que mudaram depois do boot. `setRaw(el, texto)` é para
+dado cru (nome de arquivo, caminho): apaga a chave para a troca não sobrescrever o dado.
+Um parâmetro pode ser outra chave — `{screen: {key: "title.remove"}}` — e troca junto.
+HTML: `data-i18n`, `data-i18n-md` (só `**negrito**`, o resto é escapado), `data-i18n-placeholder`,
+`data-i18n-title`.
+
+**Regras (não quebrar):**
+- **Nunca montar frase por concatenação.** Cada frase é uma chave com `{parâmetros}` — a ordem
+  das palavras muda entre idiomas (o japonês inverte quase tudo).
+- **Ícones e símbolos (✔ ✖ 💿) ficam FORA da tradução**, no código.
+- **"Arquivos da ISO" nunca se traduz**: é o nome literal de uma pasta no disco. Traduzido, o
+  usuário procuraria uma pasta que não existe. Há teste para isso.
+- **`MusicName` / `SingerName` também não**: são o que o app GRAVA no jogo com campo vazio.
+- **Não confundir com `core.LANGUAGE_CONNECTORS`**: aquilo é texto que vai DENTRO do jogo.
+- **O relatório de erro fica em português** (`_build_report`, `tSource()`): vai para o
+  desenvolvedor. A tela do usuário continua no idioma dele.
+- **Remontar lista não pode apagar escolha do usuário.** `renderPlaylists`, `renderSongs` e os
+  `<select>` de gênero guardam a seleção antes e devolvem depois — sem isso, trocar de idioma
+  (ou instalar uma ferramenta) zerava as playlists marcadas e **voltava o gênero para o
+  primeiro da lista**, o que adicionaria a música no gênero errado.
+
+**Idioma inicial:** `options.json` guarda `"language": ""` até o usuário escolher; aí
+`core.resolve_language` usa o idioma do Windows (`GetUserDefaultUILanguage`). O detectado **não é
+gravado**, então acompanha o sistema até haver uma escolha explícita. Quem já tinha
+`options.json` com `"pt-BR"` continua em pt-BR.
+
+**Adicionar uma chave:** escreva em `pt.json` e nos outros 6, use no código. Os testes
+`CatalogIntegrity` falham se faltar tradução, se um `{param}` divergir, se o negrito sumir, se
+uma chave usada não existir ou se uma chave do catálogo não for usada. `NoHardcodedBackendText`
+falha se uma mensagem voltar a ser literal no Python.
+
+**Revisão:** as traduções foram escritas por IA. Estão consistentes e validadas
+estruturalmente, mas uma revisão de falante nativo (sobretudo de, fr, it e ja) é recomendável.
 
 ## 🗂️ Arquitetura
 
@@ -260,6 +301,32 @@ Ambiente confirmado: **Python 3.14.4**, **pywebview 6.2.1**, `pythonw` no PATH =
 
 ## 🐛 Gotchas técnicos já descobertos
 
+- **💥 REBUILD APAGA O WORKSPACE — nunca rode o app de dentro de `build_out/dist/`
+  para uso real.** O app monta o workspace **ao lado do `.exe`** (`core._app_root`),
+  e o `COLLECT` do PyInstaller, com `--noconfirm`, executa
+  `Removing dir <dist>/MC3 Music Manager` antes de gravar o build novo. Quem abrir o
+  executável direto do build e preparar o jogo fica com ~10 GB de extração, as músicas
+  e os **backups** exatamente na pasta que o próximo rebuild apaga, sem perguntar.
+  **Aconteceu (2026-09):** o dono adicionou 12 faixas pelo app empacotado aberto de
+  `build_out/dist`, e o passo seguinte do plano era "regerar o dist".
+
+  Proteção: o `mc3.spec` agora **recusa o build** se a pasta de saída tiver
+  `backups`, `STREAMS`, `ASSETS`, `Arquivos da ISO`, os DATs ou `mcstrings02.json`.
+  Roda antes do `COLLECT`, então recusar não apaga nada. Testado com dados plantados
+  num `--distpath` temporário (sobreviveram) e com pasta vazia (build normal).
+  O app também avisa no log (`core.build_output_warning`) quando o workspace cai numa
+  pasta chamada `build_out`/`dist`/`build`.
+
+- **Disco cheio virava crash a 77%.** O `hash_build` morria no meio da extração e a
+  tela só mostrava `[PYI-21288:ERROR] Failed to execute script 'hash_build'` — o
+  invólucro do PyInstaller, sem a causa. Agora `core.assert_free_space` confere
+  **antes** de escrever:
+  - copiar a ISO: mede o conteúdo **montado** (a ISO tem 8,5 GB mas só 3,4 GB de
+    arquivos — o resto é padding) e exige isso + 5%;
+  - descompilar: `DECOMPILE_SPACE_FACTOR = 2.2` × tamanho dos DATs. Medido:
+    `ASSETS.DAT` 1,35 → `ASSETS/` 1,77 (1,3×); `STREAMS.DAT` 1,16 → `STREAMS/` 1,15
+    (1,0×); mais as cópias dos DATs na raiz.
+
 - **"Falha ao decodificar mcstrings02.strtbl" — preparar NÃO validava a ISO.** Relatado
   por um usuário do app instalado: `strtbl.py:198 read_str / AssertionError: String does
   not match its expected size`, a 91% do "Preparar tudo automaticamente".
@@ -316,6 +383,10 @@ Ambiente confirmado: **Python 3.14.4**, **pywebview 6.2.1**, `pythonw` no PATH =
   ⚠️ Faixas adicionadas ANTES desta correção continuam quebradas: a conformidade não
   reamostra, então elas precisam ser **removidas e adicionadas de novo** a partir do
   áudio original.
+
+  ✅ **CONFIRMADO NO JOGO (2026-09-16).** O dono adicionou 12 faixas pelo app empacotado
+  e elas tocaram. As 12 conferidas byte a byte: 32000 Hz, loop start 32, `0x24` =
+  `0xFFFFFFFF`, frame de init presente — iguais às 135 originais.
 
 - **`_run` devolve `(code, out)` — nunca descarte o `out`.** O ramo do ffmpeg fazia
   `code, _ = _run(...)` e logo abaixo usava `_tool_detail(out)`: `UnboundLocalError` em vez

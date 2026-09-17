@@ -199,7 +199,7 @@ def _run(cmd, cwd: Optional[Path] = None, log: LogFn = None, input_text: str = "
             _ACTIVE_PROCS.discard(proc)
 
     if timed_out.is_set():
-        raise ToolError("A ferramenta excedeu o tempo limite (timeout).")
+        raise ToolError(tr("err.timeout"))
     return code, "".join(lines)
 
 
@@ -231,8 +231,8 @@ def _tool_detail(out: str, limit: int = 240) -> str:
     for line in reversed(lines):  # prefer an explicit error line if there is one
         low = line.lower()
         if any(k in low for k in ("error", "erro", "exception", "assert", "failed", "denied")):
-            return f" Detalhe: {line[:limit]}"
-    return f" Detalhe: {lines[-1][:limit]}"
+            return " " + tr("tool.detail", text=line[:limit])
+    return " " + tr("tool.detail", text=lines[-1][:limit])
 
 
 def convert_audio_to_rsm(
@@ -248,46 +248,46 @@ def convert_audio_to_rsm(
     """
     source = Path(source)
     if not source.is_file():
-        raise ToolError(f"Arquivo de origem nao encontrado: {source}")
+        raise ToolError(tr("err.source_not_found", path=source))
 
     output = Path(output) if output else source.with_suffix(".rsm")
     output.parent.mkdir(parents=True, exist_ok=True)
     suffix = source.suffix.lower()
 
     if progress:
-        progress(5, "Preparando conversao...")
+        progress(5, tr("progress.preparing_conversion"))
 
     if suffix == ".rsm":
         _make_writable(output)
         shutil.copy2(source, output)
         conform_rsm_to_game(output)  # pode vir de outra ferramenta, com o mesmo defeito
         if progress:
-            progress(100, "Copiado (ja era RSM).")
+            progress(100, tr("progress.copied_rsm"))
         return output
 
     rstm = find_rstm_build()
     if rstm is None:
-        raise ToolError("rstm_build nao encontrado em tools/wav to rsm.")
+        raise ToolError(tr("err.rstm_missing"))
     ffmpeg = find_ffmpeg()
 
     # .ads/.ss2 are already PS2 audio; a .wav can also go straight to rstm_build
     # when ffmpeg is missing (legacy route — mirrors the original's fallback).
     if suffix in {".ads", ".ss2"} or (suffix == ".wav" and ffmpeg is None):
         if progress:
-            progress(45, "Gerando RSM (PS2)...")
+            progress(45, tr("progress.building_rsm"))
         with tempfile.TemporaryDirectory(prefix="mc3_rsm_", ignore_cleanup_errors=True) as scratch:
             temp_rsm = Path(scratch) / f"{source.stem}.rsm"
             code, out = _run(_tool_command(rstm, source, "-o", temp_rsm), cwd=rstm.parent, log=log)
             if code != 0:
-                raise ToolError(f"rstm_build falhou (codigo {code}).{_tool_detail(out)}")
+                raise ToolError(tr("err.tool_failed", tool="rstm_build", code=code, detail=_tool_detail(out)))
             _publish_rsm(temp_rsm, output)
         if progress:
-            progress(100, "Concluido.")
+            progress(100, tr("progress.done"))
         return output
 
     # Everything else -> ffmpeg normalize to the known-good WAV, then rstm_build.
     if ffmpeg is None:
-        raise ToolError("FFmpeg nao encontrado em tools/wav to rsm nem no PATH do Windows.")
+        raise ToolError(tr("err.ffmpeg_missing"))
 
     # Scratch WAV goes in the OS temp dir — NOT inside output.parent — for the two
     # reasons the original app already handled (it used dir=base_path +
@@ -300,7 +300,7 @@ def convert_audio_to_rsm(
     with tempfile.TemporaryDirectory(prefix="mc3_rsm_", ignore_cleanup_errors=True) as temp_dir:
         temp_wav = Path(temp_dir) / f"{source.stem}.wav"
         if progress:
-            progress(25, "Normalizando audio (ffmpeg)...")
+            progress(25, tr("progress.normalizing"))
         # Keep `out`: _tool_detail() needs the tool's own complaint, and this
         # branch is also what a user "Cancelar" lands on (killing the proc makes
         # _run return non-zero) — discarding it raised UnboundLocalError here.
@@ -311,10 +311,10 @@ def convert_audio_to_rsm(
             timeout=FFMPEG_TIMEOUT,
         )
         if code != 0:
-            raise ToolError(f"ffmpeg falhou (codigo {code}).{_tool_detail(out)}")
+            raise ToolError(tr("err.tool_failed", tool="ffmpeg", code=code, detail=_tool_detail(out)))
 
         if progress:
-            progress(65, "Gerando RSM (PS2)...")
+            progress(65, tr("progress.building_rsm"))
         # Build into the scratch dir, THEN move. rstm_build writes its OWN
         # intermediates (tmp_*.ads / tmp_*.wav) next to ITS OUTPUT
         # (rstm_build.py:59-61) and, when ps2str fails, leaves them behind
@@ -325,11 +325,11 @@ def convert_audio_to_rsm(
         temp_rsm = Path(temp_dir) / f"{source.stem}.rsm"
         code, out = _run(_tool_command(rstm, temp_wav, "-o", temp_rsm), cwd=rstm.parent, log=log)
         if code != 0:
-            raise ToolError(f"rstm_build falhou (codigo {code}).{_tool_detail(out)}")
+            raise ToolError(tr("err.tool_failed", tool="rstm_build", code=code, detail=_tool_detail(out)))
         _publish_rsm(temp_rsm, output)
 
     if progress:
-        progress(100, "Concluido.")
+        progress(100, tr("progress.done"))
     return output
 
 
@@ -370,7 +370,7 @@ def conform_rsm_to_game(path) -> list:
     path = Path(path)
     raw = path.read_bytes()
     if len(raw) <= RSTM_HEADER_SIZE or raw[:4] != RSTM_MAGIC:
-        raise ToolError(f"Arquivo RSM invalido (sem cabecalho RSTM): {path.name}")
+        raise ToolError(tr("err.rsm_invalid", name=path.name))
 
     header = bytearray(raw[:RSTM_HEADER_SIZE])
     body = raw[RSTM_HEADER_SIZE:]
@@ -405,7 +405,7 @@ def conform_rsm_to_game(path) -> list:
 def _publish_rsm(temp_rsm: Path, output: Path) -> None:
     """Move a freshly built .rsm from scratch into the game folder."""
     if not temp_rsm.is_file() or temp_rsm.stat().st_size == 0:
-        raise ToolError("rstm_build terminou sem gerar o arquivo RSM.")
+        raise ToolError(tr("err.rsm_empty"))
     output.parent.mkdir(parents=True, exist_ok=True)
     _make_writable(output)  # extracted game files carry the read-only bit
     shutil.move(str(temp_rsm), str(output))
@@ -454,14 +454,14 @@ def _mount_iso_drive(iso_path: Path, log: LogFn = None) -> Path:
     )
     code, out = _run([_find_powershell(), "-NoProfile", "-Command", command], log=log, timeout=MOUNT_TIMEOUT)
     if code != 0:
-        raise ToolError("Nao foi possivel montar a ISO selecionada.")
+        raise ToolError(tr("err.iso_mount_failed"))
     mounted = ""
     for line in out.splitlines():
         line = line.strip()
         if line.endswith(":\\"):
             mounted = line
     if not mounted:
-        raise ToolError("A ISO foi montada, mas a letra da unidade nao foi encontrada.")
+        raise ToolError(tr("err.iso_no_drive"))
     return Path(mounted)
 
 
@@ -481,33 +481,33 @@ def inspect_iso(source, log: LogFn = None, progress: ProgressFn = None) -> dict:
     """
     iso_path = Path(source)
     if not iso_path.is_file():
-        raise ToolError(f"Arquivo ISO nao encontrado: {iso_path}")
+        raise ToolError(tr("err.iso_not_found", path=iso_path))
 
     if progress:
-        progress(10, "Montando a ISO...")
+        progress(10, tr("progress.mounting_iso"))
     mounted_root = _mount_iso_drive(iso_path, log=log)
     try:
         if progress:
-            progress(45, "Lendo SYSTEM.CNF...")
+            progress(45, tr("progress.reading_cnf"))
         system_cnf = mounted_root / "SYSTEM.CNF"
         if not system_cnf.is_file():
-            raise ToolError("SYSTEM.CNF nao foi encontrado na ISO.")
+            raise ToolError(tr("err.iso_no_system_cnf"))
         boot_id = _parse_boot_id(_read_text_best_effort(system_cnf))
         if not boot_id:
-            raise ToolError("Nao foi possivel identificar o BOOT2 da ISO.")
+            raise ToolError(tr("err.iso_no_boot2"))
 
         if progress:
-            progress(75, "Verificando arquivos do jogo...")
+            progress(75, tr("progress.checking_files"))
         has_assets = (mounted_root / "ASSETS.DAT").is_file()
         has_streams = (mounted_root / "STREAMS.DAT").is_file()
         if not (has_assets and has_streams):
-            raise ToolError("A ISO nao possui ASSETS.DAT e STREAMS.DAT no formato esperado.")
+            raise ToolError(tr("err.iso_no_dats"))
 
         supported = boot_id in SUPPORTED_BOOT_IDS
         if log:
-            log(f"BOOT2={boot_id} | suportada={supported}")
+            log(tr("log.boot2", boot=boot_id, supported=supported))
         if progress:
-            progress(100, "Concluido.")
+            progress(100, tr("progress.done"))
         return {
             "iso_path": str(iso_path),
             "boot_id": boot_id,
@@ -521,6 +521,50 @@ def inspect_iso(source, log: LogFn = None, progress: ProgressFn = None) -> dict:
         _dismount_iso(iso_path, log=log)
 
 
+# ---- espaco em disco -------------------------------------------------------
+# O workspace do MC3 e grande: medido neste projeto, "Arquivos da ISO" 3,4 GB +
+# ASSETS/ 1,8 + STREAMS/ 1,2 + os dois .DAT na raiz 2,5 = ~8,8 GB. Sem checar
+# antes, um disco cheio vira o `hash_build` morrendo no meio da extracao com
+# "[PYI-xxxxx:ERROR] Failed to execute script" -- uma mensagem que nao diz nada
+# sobre a causa real, e depois de o usuario ja ter esperado 77% do processo.
+
+# ASSETS.DAT 1,35 GB -> ASSETS/ 1,77 (1,3x) e STREAMS.DAT 1,16 -> STREAMS/ 1,15
+# (1,0x); somando as copias dos DATs na raiz, 2,2x o tamanho dos DATs cobre tudo.
+DECOMPILE_SPACE_FACTOR = 2.2
+COPY_SPACE_MARGIN = 1.05
+
+
+def _gb(n: float) -> str:
+    return f"{n / (1024 ** 3):.1f} GB"
+
+
+def assert_free_space(target, needed: int, what: str) -> None:
+    """Recusa a operacao se nao couber, dizendo quanto falta."""
+    target = Path(target)
+    probe = target
+    while not probe.exists() and probe != probe.parent:
+        probe = probe.parent
+    free = shutil.disk_usage(str(probe)).free
+    if free < needed:
+        raise ToolError(tr("err.no_space", what=what, needed=_gb(needed),
+                           free=_gb(free), where=probe.anchor or probe))
+
+
+# Pastas que o pipeline de build APAGA. O PyInstaller roda
+# "Removing dir .../dist/<app>" a cada build: um workspace de ~20 GB (e os
+# backups do usuario) criado ali some no proximo rebuild, sem aviso.
+_BUILD_DIR_NAMES = frozenset({"build_out", "dist", "build"})
+
+
+def build_output_warning(ws: Workspace) -> str:
+    """Aviso quando o workspace cai dentro de uma pasta de build. Vazio se nao for."""
+    partes = {p.lower() for p in ws.base_path.resolve().parts}
+    achadas = sorted(partes & _BUILD_DIR_NAMES)
+    if not achadas:
+        return ""
+    return tr("log.build_output_warning", dirs=", ".join(achadas))
+
+
 def assert_supported_iso(source, log: LogFn = None) -> dict:
     """Preflight de "Preparar projeto": recusa uma ISO que nao seja o jogo suportado.
 
@@ -531,12 +575,8 @@ def assert_supported_iso(source, log: LogFn = None) -> dict:
     """
     report = inspect_iso(source, log=log)
     if not report.get("supported"):
-        raise ToolError(
-            f"Esta ISO nao e a versao que o app sabe editar. "
-            f"Detectado BOOT2={report.get('boot_id') or '?'}; o suportado e {SUPPORTED_GAME_NAME}. "
-            "Outras versoes/regioes do jogo tem os arquivos internos em outro formato, "
-            "e a extracao falharia no meio."
-        )
+        raise ToolError(tr("err.iso_unsupported", boot=report.get("boot_id") or "?",
+                           game=SUPPORTED_GAME_NAME))
     return report
 
 
@@ -594,7 +634,9 @@ def default_workspace() -> Workspace:
 # ---- persisted options (mirrors the original's project_state.json) ----------
 OPTIONS_FILE = "options.json"
 DEFAULT_OPTIONS = {
-    "language": "pt-BR",
+    # "" = ainda nao escolhido: resolve_language() usa o idioma do Windows.
+    # Quem ja tinha options.json guarda "pt-BR" explicitamente e continua em pt-BR.
+    "language": "",
     "last_iso": "",
     "iso_output": "",
     "iso_volume_label": "MClub",
@@ -608,22 +650,132 @@ DEFAULT_OPTIONS = {
 }
 
 
-# ---- UI translations (i18n) -------------------------------------------------
+# ---- i18n ------------------------------------------------------------------
+# UM catalogo por idioma, compartilhado com a interface (frontend/locales/*.json):
+# a tela usa as chaves via t(key) e o backend via tr(key). Tudo o que o Python
+# manda para a tela -- erros, log, progresso, rotulos do painel -- sai ja traduzido.
+#
+# Os idiomas nao foram escolhidos no chute: sao os SEIS da tabela de textos do
+# proprio jogo (mcstrings02.strtbl, colunas "Language 00".."05" = en, es, fr, de,
+# it, ja) mais o portugues do Brasil. Quem joga MC3 DUB Edition Remix joga num deles.
+#
+# NAO confundir com LANGUAGE_CONNECTORS mais abaixo: aquilo e texto gravado DENTRO
+# do jogo (o "by"/"de"/"par" do nome da musica), nao a interface do app.
 LOCALES_DIR = RESOURCE_ROOT / "frontend" / "locales"
-LANGUAGES = ("pt-BR", "en", "es")
+SOURCE_LANGUAGE = "pt-BR"      # idioma em que as chaves foram escritas
+FALLBACK_LANGUAGE = "en"       # para quem nao fala nenhum dos idiomas suportados
+LANGUAGE_FILES = {
+    "pt-BR": "pt.json",
+    "en": "en.json",
+    "es": "es.json",
+    "fr": "fr.json",
+    "de": "de.json",
+    "it": "it.json",
+    "ja": "ja.json",
+}
+LANGUAGES = tuple(LANGUAGE_FILES)
+
+# Nome que o Python devolve em locale.getlocale() no Windows ("Portuguese_Brazil").
+_WINDOWS_LANGUAGE_NAMES = {
+    "portuguese": "pt-BR", "english": "en", "spanish": "es", "french": "fr",
+    "german": "de", "italian": "it", "japanese": "ja",
+}
+_PLACEHOLDER = re.compile(r"\{(\w+)\}")
+_language = SOURCE_LANGUAGE
+_catalogs: Optional[dict] = None
 
 
 def load_translations() -> dict:
-    """Load the {lang: {key: text}} tables from frontend/locales/*.json. Served to
-    the frontend by Api.get_i18n() because a file:// page can't fetch() local JSON
-    (WebView2/Chromium blocks it). Tolerant of missing/corrupt files."""
+    """{lang: {key: text}} de todos os idiomas. Servido a tela por Api.get_i18n()
+    porque uma pagina file:// nao consegue fetch() de JSON local (o WebView2
+    bloqueia). Tolerante a arquivo ausente ou corrompido."""
     out = {}
-    for lang, fname in {"pt-BR": "pt.json", "en": "en.json", "es": "es.json"}.items():
+    for lang, fname in LANGUAGE_FILES.items():
         try:
             out[lang] = json.loads((LOCALES_DIR / fname).read_text(encoding="utf-8"))
         except (OSError, ValueError):
             out[lang] = {}
     return out
+
+
+def _all_catalogs() -> dict:
+    global _catalogs
+    if _catalogs is None:
+        _catalogs = load_translations()
+    return _catalogs
+
+
+def set_language(lang) -> str:
+    """Troca o idioma das mensagens do backend. Idioma desconhecido vira o de origem."""
+    global _language
+    _language = lang if lang in LANGUAGE_FILES else SOURCE_LANGUAGE
+    return _language
+
+
+def get_language() -> str:
+    return _language
+
+
+def fill_placeholders(text: str, params: dict) -> str:
+    """Troca {nome} pelo parametro. Um {nome} sem parametro fica como esta -- visivel,
+    em vez de explodir como str.format faria."""
+    if not params:
+        return text
+    return _PLACEHOLDER.sub(
+        lambda m: str(params[m.group(1)]) if m.group(1) in params else m.group(0), text)
+
+
+def tr(key: str, **params) -> str:
+    """Texto da chave no idioma atual, com os {parametros} preenchidos.
+
+    Cadeia de reserva: idioma atual -> ingles -> portugues -> a propria chave. Cair
+    na chave deixa uma traducao faltando VISIVEL, em vez de uma tela em branco."""
+    catalogs = _all_catalogs()
+    for lang in (_language, FALLBACK_LANGUAGE, SOURCE_LANGUAGE):
+        text = catalogs.get(lang, {}).get(key)
+        if text is not None:
+            return fill_placeholders(text, params)
+    return fill_placeholders(key, params)
+
+
+def match_language(name) -> str:
+    """'pt_BR' / 'es-MX' / 'ja_JP' / 'Portuguese_Brazil' -> idioma suportado mais proximo."""
+    tag = str(name or "").strip().replace("_", "-").lower()
+    if not tag:
+        return FALLBACK_LANGUAGE
+    if tag.startswith("pt-") or tag == "pt":
+        return "pt-BR"          # pt-PT tambem: e o portugues que existe
+    base = tag.split("-")[0]
+    if base in LANGUAGE_FILES:
+        return base
+    return _WINDOWS_LANGUAGE_NAMES.get(base, FALLBACK_LANGUAGE)
+
+
+def detect_system_language() -> str:
+    """Idioma da interface do Windows, reduzido a um dos suportados."""
+    name = ""
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            import locale
+
+            lcid = ctypes.windll.kernel32.GetUserDefaultUILanguage()
+            name = locale.windows_locale.get(lcid, "")
+        except Exception:  # noqa: BLE001 - detectar e cortesia; nunca pode derrubar o boot
+            name = ""
+    if not name:
+        try:
+            import locale
+
+            name = locale.getlocale()[0] or ""
+        except Exception:  # noqa: BLE001
+            name = ""
+    return match_language(name)
+
+
+def resolve_language(stored) -> str:
+    """O idioma salvo, se for valido; senao (primeira execucao), o do sistema."""
+    return stored if stored in LANGUAGE_FILES else detect_system_language()
 
 
 def options_path(ws: Workspace) -> Path:
@@ -685,11 +837,7 @@ def _tool_command(tool: Path, *args) -> list:
             # `MC3.exe dave.py ...` would relaunch the app instead of running the
             # tool (spawning windows forever). The build ships .exe tools; a .py
             # here means a broken install, so fail loudly instead.
-            raise ToolError(
-                f"A ferramenta {tool.name} so existe como .py, e este app esta empacotado "
-                "(sem interpretador Python). Reinstale o app — ele deve trazer as "
-                "ferramentas .exe em tools/."
-            )
+            raise ToolError(tr("err.tool_py_frozen", tool=tool.name))
         head = [sys.executable, str(tool)]
     else:
         head = [str(tool)]
@@ -716,13 +864,13 @@ def publish_dat_to_game_files(ws: Workspace, dat_name: str, log: LogFn = None) -
     """
     source = ws.base_path / dat_name
     if not source.is_file():
-        raise ToolError(f"{dat_name} nao encontrado apos a recompilacao: {source}")
+        raise ToolError(tr("err.dat_missing_after_rebuild", dat=dat_name, path=source))
     ws.game_files_path.mkdir(parents=True, exist_ok=True)
     target = ws.game_files_path / dat_name
     _make_writable(target)
     shutil.copy2(source, target)
     if log:
-        log(f"Publicado em Arquivos da ISO: {target}")
+        log(tr("log.published", path=target))
     return target
 
 
@@ -756,7 +904,7 @@ def _publish_rebuilt(scratch: Path, ws: Workspace, dat_name: str, log: LogFn = N
     """
     built = scratch / dat_name
     if not built.is_file() or built.stat().st_size == 0:
-        raise ToolError(f"A recompilacao terminou sem gerar {dat_name}.")
+        raise ToolError(tr("err.rebuild_no_output", dat=dat_name))
     target = ws.base_path / dat_name
     _make_writable(target)
     os.replace(str(built), str(target))
@@ -766,7 +914,7 @@ def _publish_rebuilt(scratch: Path, ws: Workspace, dat_name: str, log: LogFn = N
         _make_writable(sidecar_target)
         os.replace(str(sidecar), str(sidecar_target))
         if log:
-            log(f"Lista de nomes atualizada: {sidecar_target.name}")
+            log(tr("log.lst_updated", name=sidecar_target.name))
     return target
 
 
@@ -796,19 +944,19 @@ def sweep_stale_scratch(ws: Workspace, log: LogFn = None) -> int:
                 _rmtree(path)
                 removed += 1
                 if log:
-                    log(f"Scratch obsoleto removido: {path}")
+                    log(tr("log.scratch_removed", path=path))
     return removed
 
 
 def rebuild_streams_dat(ws: Workspace, log: LogFn = None, progress: ProgressFn = None) -> Path:
     """Recompile STREAMS/ into STREAMS.DAT (hash_build) and publish it."""
     if progress:
-        progress(5, "Recompilando STREAMS.DAT...")
+        progress(5, tr("progress.rebuilding_dat", dat="STREAMS.DAT"))
     if not ws.streams_path.is_dir():
-        raise ToolError(f"STREAMS nao encontrado: {ws.streams_path}")
+        raise ToolError(tr("err.streams_missing", path=ws.streams_path))
     tool = find_hash_build()
     if tool is None:
-        raise ToolError("hash_build nao encontrado em tools/.")
+        raise ToolError(tr("err.tool_missing", tool="hash_build"))
 
     # Never let a stale conversion scratch dir get packed into STREAMS.DAT.
     sweep_stale_scratch(ws, log=log)
@@ -817,7 +965,7 @@ def rebuild_streams_dat(ws: Workspace, log: LogFn = None, progress: ProgressFn =
     try:
         output = scratch / "STREAMS.DAT"
         if progress:
-            progress(30, "Executando hash_build (MClub)...")
+            progress(30, tr("progress.running_hash_build"))
         code, out = _run(
             _tool_command(tool, "B", ws.streams_path, output, "-a", "MClub"),
             cwd=ws.base_path,
@@ -825,16 +973,16 @@ def rebuild_streams_dat(ws: Workspace, log: LogFn = None, progress: ProgressFn =
             input_text="y\n",
         )
         if code != 0:
-            raise ToolError(f"hash_build falhou (codigo {code}).{_tool_detail(out)}")
+            raise ToolError(tr("err.tool_failed", tool="hash_build", code=code, detail=_tool_detail(out)))
         _publish_rebuilt(scratch, ws, "STREAMS.DAT", log=log)
     finally:
         _rmtree(scratch)
 
     if progress:
-        progress(80, "Publicando STREAMS.DAT...")
+        progress(80, tr("progress.publishing_dat", dat="STREAMS.DAT"))
     target = publish_dat_to_game_files(ws, "STREAMS.DAT", log=log)
     if progress:
-        progress(100, "Concluido.")
+        progress(100, tr("progress.done"))
     return target
 
 
@@ -845,18 +993,18 @@ def rebuild_assets_dat(ws: Workspace, log: LogFn = None, progress: ProgressFn = 
     compressing the wrong ones makes the game hang (see dave.py header).
     """
     if progress:
-        progress(5, "Recompilando ASSETS.DAT...")
+        progress(5, tr("progress.rebuilding_dat", dat="ASSETS.DAT"))
     if not ws.assets_path.is_dir():
-        raise ToolError(f"ASSETS nao encontrado: {ws.assets_path}")
+        raise ToolError(tr("err.assets_missing", path=ws.assets_path))
     tool = find_dave()
     if tool is None:
-        raise ToolError("dave nao encontrado em tools/.")
+        raise ToolError(tr("err.tool_missing", tool="dave"))
 
     scratch = _rebuild_scratch_dir(ws)
     try:
         output = scratch / "ASSETS.DAT"
         if progress:
-            progress(30, "Executando dave...")
+            progress(30, tr("progress.running_dave"))
         code, out = _run(
             _tool_command(tool, "B", ws.assets_path, output, "-ca", "-cn", "-cf", "-fc", "1"),
             cwd=ws.base_path,
@@ -864,16 +1012,16 @@ def rebuild_assets_dat(ws: Workspace, log: LogFn = None, progress: ProgressFn = 
             input_text="y\n",
         )
         if code != 0:
-            raise ToolError(f"dave falhou (codigo {code}).{_tool_detail(out)}")
+            raise ToolError(tr("err.tool_failed", tool="dave", code=code, detail=_tool_detail(out)))
         _publish_rebuilt(scratch, ws, "ASSETS.DAT", log=log)
     finally:
         _rmtree(scratch)
 
     if progress:
-        progress(80, "Publicando ASSETS.DAT...")
+        progress(80, tr("progress.publishing_dat", dat="ASSETS.DAT"))
     target = publish_dat_to_game_files(ws, "ASSETS.DAT", log=log)
     if progress:
-        progress(100, "Concluido.")
+        progress(100, tr("progress.done"))
     return target
 
 
@@ -885,11 +1033,11 @@ def rebuild_all(ws: Workspace, log: LogFn = None, progress: ProgressFn = None) -
         return lambda pct, text: progress(low + (high - low) * pct / 100.0, text)
 
     if progress:
-        progress(2, "Iniciando recompilacao completa...")
+        progress(2, tr("progress.rebuild_all_start"))
     streams = rebuild_streams_dat(ws, log=log, progress=_sub(2, 50))
     assets = rebuild_assets_dat(ws, log=log, progress=_sub(50, 100))
     if progress:
-        progress(100, "DATs recompilados e publicados.")
+        progress(100, tr("progress.rebuild_all_done"))
     return {"streams_target": streams, "assets_target": assets}
 
 
@@ -984,7 +1132,7 @@ def restore_backup(ws: Workspace, backup_root, log: LogFn = None) -> dict:
     backup_root = Path(backup_root)
     manifest_path = backup_root / _BACKUP_MANIFEST
     if not manifest_path.is_file():
-        raise ToolError(f"Manifest de backup nao encontrado: {manifest_path}")
+        raise ToolError(tr("err.backup_manifest_missing", path=manifest_path))
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 
     restored = 0
@@ -1000,16 +1148,16 @@ def restore_backup(ws: Workspace, backup_root, log: LogFn = None) -> dict:
                 shutil.copy2(source, dest)
                 restored += 1
                 if log:
-                    log(f"Restaurado: {relative.as_posix()}")
+                    log(tr("log.restored", path=relative.as_posix()))
         else:
             if dest.exists():
                 _make_writable(dest)  # read-only files can't be unlinked on Windows
                 dest.unlink()
                 removed += 1
                 if log:
-                    log(f"Removido (nao existia antes do backup): {relative.as_posix()}")
+                    log(tr("log.removed_new", path=relative.as_posix()))
     if log:
-        log(f"Restauracao concluida: {restored} restaurado(s), {removed} removido(s).")
+        log(tr("log.restore_done", restored=restored, removed=removed))
     return {"restored": restored, "removed": removed, "backup": str(backup_root)}
 
 
@@ -1057,7 +1205,7 @@ def _read_text(path) -> tuple[str, str]:
             return path.read_text(encoding=encoding), encoding
         except UnicodeDecodeError:
             continue
-    raise ToolError(f"Nao foi possivel ler {path}")
+    raise ToolError(tr("err.cannot_read", path=path))
 
 
 def _write_text(path, text: str, encoding: str = "utf-8") -> None:
@@ -1182,10 +1330,10 @@ def read_audio_tags(source, log: LogFn = None) -> dict:
             title = normalize_game_text(tags.get("title", ""))
             artist = normalize_game_text(tags.get("artist", "") or tags.get("album_artist", ""))
             if title or artist:
-                payload = {"title": title, "artist": artist, "provider": "Tags locais"}
+                payload = {"title": title, "artist": artist, "provider": tr("guess.from_tags")}
     except Exception as exc:  # noqa: BLE001 - tag reading is best-effort
         if log:
-            log(f"Aviso: falha ao ler tags de {source.name}: {exc}")
+            log(tr("log.tags_failed", name=source.name, error=exc))
     return payload
 
 
@@ -1252,7 +1400,9 @@ def source_guess(source_value, genre: Optional[str] = None, log: LogFn = None) -
         "display_name": f"{artist} - {title}" if artist and title else title or source.name,
         "string_key": string_key(resolved_genre, asset_name) if asset_name else "",
         "playlist_entry": playlist_entry(resolved_genre, asset_name) if asset_name else "",
-        "detected_by": tags.get("provider") or "Nome do arquivo",
+        "detected_by": tags.get("provider") or tr("guess.from_filename"),
+        # a tela traduz pela chave, para a origem trocar de idioma junto com o resto
+        "detected_by_key": "guess.from_tags" if tags.get("provider") else "guess.from_filename",
     }
 
 
@@ -1366,7 +1516,7 @@ def update_playlist(playlist_path, entry: str, mode: str) -> bool:
         changed = len(new_lines) != len(lines)
         lines = new_lines
     else:
-        raise ToolError("Modo de playlist invalido.")
+        raise ToolError(tr("err.playlist_mode"))
 
     if not changed:
         return False
@@ -1427,9 +1577,9 @@ def decode_strings(ws: Workspace, log: LogFn = None) -> dict:
     """Decode the workspace mcstrings02.strtbl to a dict via `strtbl dec`."""
     tool = find_strtbl()
     if tool is None:
-        raise ToolError("strtbl nao encontrado em tools/.")
+        raise ToolError(tr("err.tool_missing", tool="strtbl"))
     if not ws.strtbl_path.is_file():
-        raise ToolError(f"mcstrings02.strtbl nao encontrado: {ws.strtbl_path}")
+        raise ToolError(tr("err.strtbl_file_missing", path=ws.strtbl_path))
     ws.base_path.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=str(ws.base_path), ignore_cleanup_errors=True) as temp_dir_name:
         temp_dir = Path(temp_dir_name)
@@ -1437,7 +1587,7 @@ def decode_strings(ws: Workspace, log: LogFn = None) -> dict:
         shutil.copy2(ws.strtbl_path, temp_strtbl)
         code, out = _run(_tool_command(tool, "dec", temp_strtbl), cwd=ws.base_path, log=log, input_text="y\n")
         if code != 0:
-            raise ToolError(f"Falha ao decodificar mcstrings02.strtbl.{_tool_detail(out)}")
+            raise ToolError(tr("err.strtbl_decode", detail=_tool_detail(out)))
         return json.loads((temp_dir / "mcstrings02.json").read_text(encoding="utf-8"))
 
 
@@ -1453,9 +1603,9 @@ def compile_strings_json_to_strtbl(ws: Workspace, log: LogFn = None) -> None:
     and publish it to both the root and ASSETS/fonts copies."""
     tool = find_strtbl()
     if tool is None:
-        raise ToolError("strtbl nao encontrado em tools/.")
+        raise ToolError(tr("err.tool_missing", tool="strtbl"))
     if not ws.strings_json_path.is_file():
-        raise ToolError("mcstrings02.json nao foi encontrado para compilar.")
+        raise ToolError(tr("err.strings_json_missing"))
     with tempfile.TemporaryDirectory(dir=str(ws.base_path), ignore_cleanup_errors=True) as temp_dir_name:
         temp_dir = Path(temp_dir_name)
         temp_json = temp_dir / "mcstrings02.json"
@@ -1463,7 +1613,7 @@ def compile_strings_json_to_strtbl(ws: Workspace, log: LogFn = None) -> None:
         temp_json.write_text(json.dumps(json.loads(content), indent=4, ensure_ascii=False) + "\n", encoding="utf-8")
         code, out = _run(_tool_command(tool, "enc", temp_json), cwd=ws.base_path, log=log, input_text="y\n")
         if code != 0:
-            raise ToolError(f"Falha ao compilar mcstrings02.json para mcstrings02.strtbl.{_tool_detail(out)}")
+            raise ToolError(tr("err.strtbl_encode", detail=_tool_detail(out)))
         compiled = temp_dir / "mcstrings02.strtbl"
         _make_writable(ws.root_strtbl_path)
         shutil.copy2(compiled, ws.root_strtbl_path)
@@ -1471,7 +1621,7 @@ def compile_strings_json_to_strtbl(ws: Workspace, log: LogFn = None) -> None:
         _make_writable(ws.strtbl_path)
         shutil.copy2(compiled, ws.strtbl_path)
         if log:
-            log(f"mcstrings02.strtbl atualizado em {ws.root_strtbl_path} e {ws.strtbl_path}")
+            log(tr("log.strtbl_updated", a=ws.root_strtbl_path, b=ws.strtbl_path))
 
 
 def _load_strings_json_data(ws: Workspace, fallback_data: Optional[dict] = None) -> dict:
@@ -1499,7 +1649,7 @@ def build_add_spec(ws: Workspace, source, title: str, artist: str, genre: str, a
         title="" if cleaned_title == DEFAULT_TITLE_PLACEHOLDER else cleaned_title,
     )
     if not cleaned_title or not cleaned_artist or not cleaned_asset or cleaned_genre not in GENRES:
-        raise ToolError("Preencha titulo, artista, genero e nome interno do arquivo.")
+        raise ToolError(tr("err.fill_fields"))
     return {
         "source": source,
         "title": cleaned_title,
@@ -1535,7 +1685,7 @@ def add_songs(ws: Workspace, specs: list, *, allow_overwrite: bool = False,
     write mcstrings02.json + recompile STRTBL. Each spec needs the keys produced
     by build_add_spec plus a 'playlist_targets' list of .play Paths."""
     if not specs:
-        raise ToolError("Nenhuma musica valida foi preparada para adicao.")
+        raise ToolError(tr("err.no_valid_songs"))
 
     # Colisao DENTRO do proprio lote. coerce_asset_name normaliza agressivamente
     # (tira "official", "video", "hq", bitrates...), entao dois arquivos distintos
@@ -1548,22 +1698,15 @@ def add_songs(ws: Workspace, specs: list, *, allow_overwrite: bool = False,
             f"{name} <- " + ", ".join(Path(src).name for src in sources)
             for name, sources in duplicates
         )
-        raise ToolError(
-            f"Adicao cancelada: {len(duplicates)} nome(s) interno(s) repetido(s) no lote - "
-            f"as faixas se sobrescreveriam. Edite o titulo/artista (ou o nome interno) "
-            f"para diferencia-las. {detail}"
-        )
+        raise ToolError(tr("err.batch_duplicates", n=len(duplicates), detail=detail))
 
     existing = existing_spec_targets(specs)
     if existing and not allow_overwrite:
-        raise ToolError(
-            f"Adicao cancelada: {len(existing)} arquivo(s) .rsm de destino ja existem. "
-            "Marque a opcao de sobrescrever para continuar."
-        )
+        raise ToolError(tr("err.targets_exist", n=len(existing)))
 
     backup_dir = create_backup_session(ws, backup_label, timestamp=timestamp)
     if log:
-        log(f"Backup preparado em {backup_dir}")
+        log(tr("log.backup_prepared", path=backup_dir))
 
     unique_playlists = []
     seen = set()
@@ -1596,17 +1739,17 @@ def _apply_add_specs(ws: Workspace, specs: list, backup_dir: Path,
     for index, spec in enumerate(specs, start=1):
         if progress:
             progress(12.0 + ((index - 1) / max(total, 1)) * 56.0,
-                     f"[{index}/{total}] {Path(spec['source']).name}...")
+                     tr("progress.track", i=index, n=total, name=Path(spec["source"]).name))
         spec["stream_target"].parent.mkdir(parents=True, exist_ok=True)
         convert_audio_to_rsm(spec["source"], spec["stream_target"], log=log)
         if log:
-            log(f"RSM instalado em {spec['stream_target']}")
+            log(tr("log.rsm_installed", path=spec["stream_target"]))
 
         for playlist in spec.get("playlist_targets", []):
             if update_playlist(playlist, spec["playlist_entry"], "add"):
                 playlist_changes += 1
                 if log:
-                    log(f"Playlist atualizada: {Path(playlist).name} -> {spec['asset_name']}")
+                    log(tr("log.playlist_updated", playlist=Path(playlist).name, asset=spec["asset_name"]))
 
         new_entry = song_entry(entries, spec["genre"], spec["title"], spec["artist"])
         strings_data["data"] = insert_entry_near_genre_block(entries, spec["string_key"], new_entry, spec["genre"])
@@ -1618,11 +1761,11 @@ def _apply_add_specs(ws: Workspace, specs: list, backup_dir: Path,
         strings_json_entries = strings_json_data["data"]
 
     if progress:
-        progress(74, "Gravando mcstrings02.json e recompilando STRTBL...")
+        progress(74, tr("progress.writing_strings"))
     sync_strings_json(ws, strings_json_data)
     compile_strings_json_to_strtbl(ws, log=log)
     if progress:
-        progress(100, "Concluido.")
+        progress(100, tr("progress.done"))
     return {"added": total, "playlist_changes": playlist_changes, "backup": str(backup_dir)}
 
 
@@ -1679,9 +1822,9 @@ def _copy_tree_with_progress(source_root, target_root, log: LogFn = None, progre
         shutil.copy2(path, target)
         copied += 1
         if progress and file_count:
-            progress((copied / file_count) * 100.0, f"Copiando ({copied}/{file_count})...")
+            progress((copied / file_count) * 100.0, tr("progress.copying", i=copied, n=file_count))
     if log:
-        log(f"{copied} arquivo(s) copiados para {target_root}")
+        log(tr("log.files_copied", n=copied, path=target_root))
     return copied
 
 
@@ -1693,15 +1836,22 @@ def copy_iso_to_game_files(ws: Workspace, iso_source, log: LogFn = None,
     a imagem duas vezes)."""
     iso_source = Path(iso_source)
     if not iso_source.is_file():
-        raise ToolError(f"Arquivo ISO nao encontrado: {iso_source}")
+        raise ToolError(tr("err.iso_not_found", path=iso_source))
     if verify:
         if progress:
-            progress(1, "Conferindo a ISO...")
+            progress(1, tr("progress.checking_iso"))
         assert_supported_iso(iso_source, log=log)
     if progress:
-        progress(2, "Montando a ISO...")
+        progress(2, tr("progress.mounting_iso"))
     mounted = _mount_iso_drive(iso_source, log=log)
     try:
+        # Com a imagem montada da para medir o tamanho REAL do conteudo (a ISO em
+        # si costuma ser bem maior que a soma dos arquivos, por causa do padding).
+        origem = sum(f.stat().st_size for f in mounted.rglob("*") if f.is_file())
+        if log:
+            log(tr("log.iso_content", size=_gb(origem)))
+        assert_free_space(ws.base_path, int(origem * COPY_SPACE_MARGIN),
+                          tr("space.copy_iso"))
         return _copy_tree_with_progress(mounted, ws.game_files_path, log=log, progress=progress)
     finally:
         _dismount_iso(iso_source, log=log)
@@ -1710,54 +1860,50 @@ def copy_iso_to_game_files(ws: Workspace, iso_source, log: LogFn = None,
 def _extract_assets_dat(ws: Workspace, log: LogFn = None) -> None:
     tool = find_dave()
     if tool is None:
-        raise ToolError("dave nao encontrado em tools/.")
+        raise ToolError(tr("err.tool_missing", tool="dave"))
     code, out = _run(_tool_command(tool, "X", ws.base_path / "ASSETS.DAT"), cwd=ws.base_path, log=log)
     if code != 0 or not ws.assets_path.is_dir():
-        raise ToolError(f"Falha ao extrair ASSETS.DAT.{_tool_detail(out)}")
+        raise ToolError(tr("err.extract_failed", dat="ASSETS.DAT", detail=_tool_detail(out)))
 
 
 def _extract_streams_dat(ws: Workspace, log: LogFn = None) -> None:
     tool = find_hash_build()
     if tool is None:
-        raise ToolError("hash_build nao encontrado em tools/.")
+        raise ToolError(tr("err.tool_missing", tool="hash_build"))
     lst = find_streams_list()
     if lst is None:
-        raise ToolError("MC3_PS2_Streams.lst nao encontrado em tools/.")
+        raise ToolError(tr("err.lst_missing"))
     code, out = _run(
         _tool_command(tool, "X", ws.base_path / "STREAMS.DAT", "-nl", lst, "-a", "mclub", "-th", "45"),
         cwd=ws.base_path, log=log,
     )
     if code != 0 or not ws.streams_path.is_dir():
-        raise ToolError(f"Falha ao extrair STREAMS.DAT.{_tool_detail(out)}")
+        raise ToolError(tr("err.extract_failed", dat="STREAMS.DAT", detail=_tool_detail(out)))
 
 
 def _prepare_strings_workspace(ws: Workspace, log: LogFn = None) -> None:
     """Copy ASSETS/fonts/mcstrings02.strtbl to the root and decode it to JSON."""
     if not ws.strtbl_path.is_file():
-        raise ToolError("mcstrings02.strtbl nao foi encontrado dentro de ASSETS/fonts.")
+        raise ToolError(tr("err.strtbl_not_in_assets"))
     _make_writable(ws.root_strtbl_path)
     shutil.copy2(ws.strtbl_path, ws.root_strtbl_path)
     strtbl = find_strtbl()
     if strtbl is None:
-        raise ToolError("strtbl nao encontrado em tools/.")
+        raise ToolError(tr("err.tool_missing", tool="strtbl"))
     with tempfile.TemporaryDirectory(dir=str(ws.base_path), ignore_cleanup_errors=True) as temp_dir_name:
         temp_dir = Path(temp_dir_name)
         temp_strtbl = temp_dir / "mcstrings02.strtbl"
         shutil.copy2(ws.root_strtbl_path, temp_strtbl)
         code, out = _run(_tool_command(strtbl, "dec", temp_strtbl), cwd=ws.base_path, log=log, input_text="y\n")
         if code != 0:
-            raise ToolError(
-                "Falha ao decodificar mcstrings02.strtbl (a tabela de textos do jogo). "
-                f"O arquivo extraido tem {ws.root_strtbl_path.stat().st_size if ws.root_strtbl_path.is_file() else 0} bytes. "
-                "Isso costuma significar que a ISO nao e a versao suportada "
-                f"({SUPPORTED_GAME_NAME}) ou que a extracao saiu incompleta (disco cheio "
-                "ou antivirus). Use o botao de relatorio de erro para enviar o diagnostico."
-                + _tool_detail(out))
+            size = ws.root_strtbl_path.stat().st_size if ws.root_strtbl_path.is_file() else 0
+            raise ToolError(tr("err.strtbl_decode_extracted", size=size,
+                               game=SUPPORTED_GAME_NAME, detail=_tool_detail(out)))
         json_text = (temp_dir / "mcstrings02.json").read_text(encoding="utf-8")
     _make_writable(ws.strings_json_path)
     ws.strings_json_path.write_text(json_text, encoding="utf-8")
     if log:
-        log(f"mcstrings02.json gerado: {ws.strings_json_path}")
+        log(tr("log.strings_json_generated", path=ws.strings_json_path))
 
 
 def decompile_workspace(ws: Workspace, *, force_refresh: bool = False,
@@ -1765,26 +1911,30 @@ def decompile_workspace(ws: Workspace, *, force_refresh: bool = False,
     """Step 4: from ASSETS.DAT/STREAMS.DAT in 'Arquivos da ISO', build the editable
     ASSETS/, STREAMS/ and mcstrings02.json. Ports _decompile_workspace_from_game_files_worker."""
     if not ws.game_files_path.is_dir():
-        raise ToolError(f"Arquivos da ISO nao encontrados: {ws.game_files_path}")
+        raise ToolError(tr("err.gamefiles_missing", path=ws.game_files_path))
     assets_source = ws.game_files_path / "ASSETS.DAT"
     streams_source = ws.game_files_path / "STREAMS.DAT"
     if not assets_source.is_file():
-        raise ToolError(f"ASSETS.DAT nao encontrado em Arquivos da ISO: {assets_source}")
+        raise ToolError(tr("err.dat_not_in_gamefiles", dat="ASSETS.DAT", path=assets_source))
     if not streams_source.is_file():
-        raise ToolError(f"STREAMS.DAT nao encontrado em Arquivos da ISO: {streams_source}")
+        raise ToolError(tr("err.dat_not_in_gamefiles", dat="STREAMS.DAT", path=streams_source))
+
+    dats = assets_source.stat().st_size + streams_source.stat().st_size
+    assert_free_space(ws.base_path, int(dats * DECOMPILE_SPACE_FACTOR),
+                      tr("space.decompile"))
 
     assets_root = ws.base_path / "ASSETS.DAT"
     streams_root = ws.base_path / "STREAMS.DAT"
     copied_root = []
     if force_refresh or not assets_root.is_file():
         if progress:
-            progress(8, "Copiando ASSETS.DAT para a raiz...")
+            progress(8, tr("progress.copying_dat_root", dat="ASSETS.DAT"))
         _make_writable(assets_root)
         shutil.copy2(assets_source, assets_root)
         copied_root.append("ASSETS.DAT")
     if force_refresh or not streams_root.is_file():
         if progress:
-            progress(16, "Copiando STREAMS.DAT para a raiz...")
+            progress(16, tr("progress.copying_dat_root", dat="STREAMS.DAT"))
         _make_writable(streams_root)
         shutil.copy2(streams_source, streams_root)
         copied_root.append("STREAMS.DAT")
@@ -1794,7 +1944,7 @@ def decompile_workspace(ws: Workspace, *, force_refresh: bool = False,
         if ws.assets_path.is_dir():
             _rmtree(ws.assets_path)
         if progress:
-            progress(32, "Descompilando ASSETS.DAT...")
+            progress(32, tr("progress.decompiling_dat", dat="ASSETS.DAT"))
         _extract_assets_dat(ws, log=log)
         extracted_assets = True
 
@@ -1803,19 +1953,19 @@ def decompile_workspace(ws: Workspace, *, force_refresh: bool = False,
         if ws.streams_path.is_dir():
             _rmtree(ws.streams_path)
         if progress:
-            progress(56, "Descompilando STREAMS.DAT...")
+            progress(56, tr("progress.decompiling_dat", dat="STREAMS.DAT"))
         _extract_streams_dat(ws, log=log)
         extracted_streams = True
 
     prepared_strings = False
     if force_refresh or not ws.root_strtbl_path.is_file() or not ws.strings_json_path.is_file() or extracted_assets:
         if progress:
-            progress(82, "Descompilando mcstrings02.strtbl para JSON...")
+            progress(82, tr("progress.decompiling_strings"))
         _prepare_strings_workspace(ws, log=log)
         prepared_strings = True
 
     if progress:
-        progress(100, "Workspace pronto para editar.")
+        progress(100, tr("progress.workspace_ready"))
     return {
         "copied_root_files": copied_root,
         "extracted_assets": extracted_assets,
@@ -1830,7 +1980,7 @@ def prepare_project_from_iso(ws: Workspace, iso_source, log: LogFn = None, progr
     Ports _prepare_project_from_iso_worker. Clears prior game_files first."""
     iso_source = Path(iso_source)
     if not iso_source.is_file():
-        raise ToolError(f"Arquivo ISO nao encontrado: {iso_source}")
+        raise ToolError(tr("err.iso_not_found", path=iso_source))
 
     def _sub(low: float, high: float) -> ProgressFn:
         if not progress:
@@ -1840,14 +1990,17 @@ def prepare_project_from_iso(ws: Workspace, iso_source, log: LogFn = None, progr
     # Confere ANTES de apagar o workspace atual: recusar uma ISO errada nao pode
     # custar a extracao que ja estava la.
     if progress:
-        progress(1, "Conferindo a ISO...")
+        progress(1, tr("progress.checking_iso"))
+    aviso = build_output_warning(ws)
+    if aviso and log:
+        log(aviso)
     assert_supported_iso(iso_source, log=log)
 
     if ws.game_files_path.exists():
         _rmtree(ws.game_files_path)  # fresh import
     count = copy_iso_to_game_files(ws, iso_source, log=log, progress=_sub(2, 48), verify=False)
     if log:
-        log(f"ISO copiada ({count} arquivo(s)). Descompilando o workspace...")
+        log(tr("log.iso_copied", n=count))
     result = decompile_workspace(ws, force_refresh=True, log=log, progress=_sub(48, 100))
     result["copied_count"] = count
     return result
@@ -1889,26 +2042,26 @@ def reset_workspace(ws: Workspace, *, log: LogFn = None, progress: ProgressFn = 
     removed = []
     for index, target in enumerate(targets):
         if progress:
-            progress((index / total) * 100.0, f"Removendo {target.name}...")
+            progress((index / total) * 100.0, tr("progress.removing_item", name=target.name))
         if target.is_dir():
             _rmtree(target)
             removed.append(target.name)
             if log:
-                log(f"Removido: {target}")
+                log(tr("log.removed", path=target))
         elif target.exists():
             _make_writable(target)
             try:
                 target.unlink()
                 removed.append(target.name)
                 if log:
-                    log(f"Removido: {target}")
+                    log(tr("log.removed", path=target))
             except OSError as exc:  # noqa: PERF203 - report and keep going
                 if log:
-                    log(f"Aviso: nao foi possivel remover {target}: {exc}")
+                    log(tr("log.remove_failed", path=target, error=exc))
     if progress:
-        progress(100.0, "Projeto resetado. Escolha uma nova ISO para comecar.")
+        progress(100.0, tr("progress.reset_done"))
     if log:
-        log(f"Reset concluido: {len(removed)} item(ns) removido(s). Backups preservados.")
+        log(tr("log.reset_done", n=len(removed)))
     return {"removed": removed, "count": len(removed)}
 
 
@@ -1992,7 +2145,7 @@ def validate_genre(genre) -> str:
     """Aceita apenas um dos generos conhecidos do jogo."""
     cleaned = str(genre or "").strip()
     if cleaned not in GENRES:
-        raise ToolError(f"Genero invalido: {genre!r}")
+        raise ToolError(tr("err.invalid_genre", value=repr(genre)))
     return cleaned
 
 
@@ -2002,7 +2155,7 @@ def validate_asset_name(asset_name) -> str:
     Isso descarta separadores de caminho, '..' e nomes vazios de uma vez so."""
     cleaned = str(asset_name or "").strip()
     if not cleaned or not re.fullmatch(r"[A-Za-z0-9_]+", cleaned):
-        raise ToolError(f"Nome interno invalido: {asset_name!r}")
+        raise ToolError(tr("err.invalid_asset", value=repr(asset_name)))
     return cleaned
 
 
@@ -2013,9 +2166,9 @@ def resolve_playlist(ws: Workspace, rel) -> Path:
     candidate = (ws.assets_path / str(rel)).resolve()
     root = ws.assets_path.resolve()
     if candidate == root or root not in candidate.parents:
-        raise ToolError(f"Playlist fora do workspace: {rel!r}")
+        raise ToolError(tr("err.playlist_outside", value=repr(rel)))
     if candidate.suffix.lower() != ".play":
-        raise ToolError(f"Playlist invalida: {rel!r}")
+        raise ToolError(tr("err.playlist_invalid", value=repr(rel)))
     return candidate
 
 
@@ -2040,9 +2193,9 @@ def remove_songs(ws: Workspace, selection: list, *, remove_audio: bool = True,
     Mirrors remove_music: backup -> remove from playlists -> remove string entries
     (recompile STRTBL) -> delete the .rsm files. Each action is optional."""
     if not selection:
-        raise ToolError("Nenhuma música selecionada para remover.")
+        raise ToolError(tr("err.no_songs_selected"))
     if not (remove_audio or remove_playlists or remove_strings):
-        raise ToolError("Marque ao menos uma ação (áudio, playlists ou strings).")
+        raise ToolError(tr("err.no_action"))
 
     records = []
     for item in selection:
@@ -2056,7 +2209,7 @@ def remove_songs(ws: Workspace, selection: list, *, remove_audio: bool = True,
 
     backup_dir = create_backup_session(ws, backup_label, timestamp=timestamp)
     if log:
-        log(f"Backup preparado em {backup_dir}")
+        log(tr("log.backup_prepared", path=backup_dir))
 
     try:
         return _apply_remove(ws, records, backup_dir, remove_audio=remove_audio,
@@ -2085,7 +2238,7 @@ def _apply_remove(ws: Workspace, records: list, backup_dir: Path, *, remove_audi
     playlist_changes = 0
     if remove_playlists:
         if progress:
-            progress(30, "Removendo das playlists...")
+            progress(30, tr("progress.removing_playlists"))
         backup_files(ws, unique_playlists, backup_dir)
         for record in records:
             entry = playlist_entry(record["genre"], record["asset_name"])
@@ -2093,12 +2246,12 @@ def _apply_remove(ws: Workspace, records: list, backup_dir: Path, *, remove_audi
                 if update_playlist(playlist, entry, "remove"):
                     playlist_changes += 1
                     if log:
-                        log(f"Removido da playlist {Path(playlist).name}: {record['asset_name']}")
+                        log(tr("log.removed_from_playlist", playlist=Path(playlist).name, asset=record["asset_name"]))
 
     removed_strings = 0
     if remove_strings:
         if progress:
-            progress(58, "Atualizando mcstrings02...")
+            progress(58, tr("progress.updating_strings"))
         backup_files(ws, (ws.root_strtbl_path, ws.strtbl_path, ws.strings_json_path), backup_dir)
         strings_data = decode_strings(ws, log=log)
         entries = strings_data.setdefault("data", {})
@@ -2118,7 +2271,7 @@ def _apply_remove(ws: Workspace, records: list, backup_dir: Path, *, remove_audi
                 removed_any = True
                 removed_strings += 1
                 if log:
-                    log(f"Entrada removida do mcstrings02: {key}")
+                    log(tr("log.string_removed", key=key))
         if removed_any:
             sync_strings_json(ws, json_data)
             compile_strings_json_to_strtbl(ws, log=log)
@@ -2126,7 +2279,7 @@ def _apply_remove(ws: Workspace, records: list, backup_dir: Path, *, remove_audi
     removed_audio = 0
     if remove_audio:
         if progress:
-            progress(78, "Apagando arquivos de áudio...")
+            progress(78, tr("progress.deleting_audio"))
         for record in records:
             target = record["path"]
             if target.exists():
@@ -2134,10 +2287,10 @@ def _apply_remove(ws: Workspace, records: list, backup_dir: Path, *, remove_audi
                 target.unlink()
                 removed_audio += 1
                 if log:
-                    log(f"Arquivo apagado: {target.name}")
+                    log(tr("log.file_deleted", name=target.name))
 
     if progress:
-        progress(100, "Concluido.")
+        progress(100, tr("progress.done"))
     return {
         "removed": len(records),
         "playlist_changes": playlist_changes,
@@ -2247,16 +2400,16 @@ def install_tool(kind: str, log: LogFn = None, progress: ProgressFn = None) -> d
     The winget subprocess is cancelable (registered in _ACTIVE_PROCS)."""
     spec = _TOOL_SPECS.get(kind)
     if spec is None:
-        raise ToolError(f"Ferramenta desconhecida: {kind}")
+        raise ToolError(tr("err.unknown_tool", kind=kind))
     label = spec["label"]
     winget = find_winget()
     if winget is None:
         if log:
-            log("winget nao foi encontrado neste Windows.")
+            log(tr("log.no_winget"))
         return {"ok": False, "reason": "no-winget", "label": label, "download_url": spec["url"]}
 
     if progress:
-        progress(5, f"Instalando {label} via winget...")
+        progress(5, tr("progress.installing_winget", tool=label))
     code, out = _run(
         [winget, "install", "--id", spec["winget_id"], "--exact",
          "--accept-package-agreements", "--accept-source-agreements", "--silent"],
@@ -2266,9 +2419,9 @@ def install_tool(kind: str, log: LogFn = None, progress: ProgressFn = None) -> d
     # so the real success test is whether the tool is now detectable.
     found = spec["find"]() is not None
     if progress:
-        progress(100, "Concluido." if found else "Terminado.")
+        progress(100, tr("progress.done") if found else tr("progress.finished"))
     if not found and code != 0:
-        raise ToolError(f"Nao foi possivel instalar {label} via winget (codigo {code}).{_tool_detail(out)}")
+        raise ToolError(tr("err.winget_failed", tool=label, code=code, detail=_tool_detail(out)))
     return {"ok": True, "label": label, "installed": found, "code": code}
 
 
@@ -2286,22 +2439,22 @@ def overview(ws: Workspace) -> dict:
 
     winget_ok = bool(find_winget())
     programs = [
-        {"name": "FFmpeg", "role": "converte áudio para RSM", "found": bool(ffmpeg), "essential": True,
+        {"name": "FFmpeg", "role": tr("ov.role_ffmpeg"), "found": bool(ffmpeg), "essential": True,
          "kind": "ffmpeg", "installable": winget_ok, "download_url": _TOOL_SPECS["ffmpeg"]["url"]},
-        {"name": "ImgBurn", "role": "gera a ISO final", "found": bool(imgburn), "essential": True,
+        {"name": "ImgBurn", "role": tr("ov.role_imgburn"), "found": bool(imgburn), "essential": True,
          "kind": "imgburn", "installable": winget_ok, "download_url": _TOOL_SPECS["imgburn"]["url"]},
-        {"name": "Ferramentas PS2", "role": "dave / hash_build / strtbl + lista", "found": ps2_tools_ok, "essential": True},
-        {"name": "foobar2000", "role": "preview de áudio (opcional)", "found": bool(foobar), "essential": False,
+        {"name": tr("ov.name_ps2"), "role": tr("ov.role_ps2"), "found": ps2_tools_ok, "essential": True},
+        {"name": "foobar2000", "role": tr("ov.role_foobar"), "found": bool(foobar), "essential": False,
          "kind": "foobar", "installable": winget_ok, "download_url": _TOOL_SPECS["foobar"]["url"]},
     ]
 
     tools_ready = bool(ffmpeg and imgburn and ps2_tools_ok)
     steps = [
-        {"n": 1, "title": "Ferramentas do PC", "state": "ok" if tools_ready else "pending", "target": "card-inicio"},
-        {"n": 2, "title": "Preparar o projeto (extrair a ISO)", "state": "ok" if prepared else "pending", "target": "card-prepare"},
-        {"n": 3, "title": "Adicionar / Remover músicas", "state": "available" if prepared else "blocked", "target": "card-add"},
-        {"n": 4, "title": "Recompilar os DATs", "state": "available" if prepared else "blocked", "target": "card-rebuild"},
-        {"n": 5, "title": "Gerar a ISO final", "state": "available" if (prepared and imgburn) else "blocked", "target": "card-iso-out"},
+        {"n": 1, "title": tr("ov.step_tools"), "state": "ok" if tools_ready else "pending", "target": "card-inicio"},
+        {"n": 2, "title": tr("ov.step_prepare"), "state": "ok" if prepared else "pending", "target": "card-prepare"},
+        {"n": 3, "title": tr("ov.step_edit"), "state": "available" if prepared else "blocked", "target": "card-add"},
+        {"n": 4, "title": tr("ov.step_rebuild"), "state": "available" if prepared else "blocked", "target": "card-rebuild"},
+        {"n": 5, "title": tr("ov.step_iso"), "state": "available" if (prepared and imgburn) else "blocked", "target": "card-iso-out"},
     ]
 
     return {
@@ -2321,11 +2474,11 @@ def generate_final_iso(ws: Workspace, output_iso, volume_label: str = "MClub",
     _generate_final_iso_impl (the integrity report step is not ported)."""
     imgburn = find_imgburn()
     if imgburn is None:
-        raise ToolError("ImgBurn nao foi encontrado. Instale o ImgBurn para gerar a ISO final.")
+        raise ToolError(tr("err.imgburn_missing"))
     if not ws.game_files_path.is_dir():
-        raise ToolError(f"Arquivos da ISO nao encontrados: {ws.game_files_path}")
+        raise ToolError(tr("err.gamefiles_missing", path=ws.game_files_path))
     if not (ws.game_files_path / "SYSTEM.CNF").is_file():
-        raise ToolError("SYSTEM.CNF nao foi encontrado em Arquivos da ISO.")
+        raise ToolError(tr("err.no_system_cnf_gamefiles"))
 
     output_iso = Path(output_iso)
 
@@ -2335,16 +2488,16 @@ def generate_final_iso(ws: Workspace, output_iso, volume_label: str = "MClub",
         return lambda pct, text: progress(low + (high - low) * pct / 100.0, text)
 
     if progress:
-        progress(4, "Recompilando DATs antes de gerar a ISO...")
+        progress(4, tr("progress.rebuild_before_iso"))
     rebuild_all(ws, log=log, progress=_sub(4, 68))
 
     output_iso.parent.mkdir(parents=True, exist_ok=True)
     _make_writable(output_iso)
     if progress:
-        progress(72, "Gerando ISO final com ImgBurn...")
+        progress(72, tr("progress.imgburn"))
     code, out = _run(_build_imgburn_command(imgburn, ws.game_files_path, output_iso, volume_label), log=log)
     if code != 0 or not output_iso.is_file():
-        raise ToolError(f"O ImgBurn nao conseguiu gerar a ISO final.{_tool_detail(out)}")
+        raise ToolError(tr("err.imgburn_failed", detail=_tool_detail(out)))
     if progress:
-        progress(100, "Concluido.")
+        progress(100, tr("progress.done"))
     return output_iso

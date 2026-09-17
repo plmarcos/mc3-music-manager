@@ -226,7 +226,8 @@ class Options(unittest.TestCase):
     def test_options_round_trip_and_merge(self):
         with tempfile.TemporaryDirectory() as td:
             ws = core.Workspace(Path(td))
-            self.assertEqual(core.load_options(ws)["language"], "pt-BR")  # defaults
+            # "" = ainda nao escolhido: o app usa o idioma do Windows
+            self.assertEqual(core.load_options(ws)["language"], "")
             self.assertFalse(core.options_path(ws).exists())
 
             core.save_options(ws, {"language": "en", "iso_volume_label": "MYDISC", "bogus": 1})
@@ -286,17 +287,161 @@ class InstallTool(unittest.TestCase):
 
 
 class I18n(unittest.TestCase):
-    """Translation tables load from frontend/locales/*.json."""
+    """Os catalogos em frontend/locales/*.json e o tr() do backend."""
 
-    def test_load_translations_has_three_languages(self):
-        tr = core.load_translations()
-        self.assertEqual(set(tr.keys()), {"pt-BR", "en", "es"})
-        self.assertEqual(tr["en"]["rail.inicio"], "Home")
-        self.assertEqual(tr["pt-BR"]["rail.inicio"], "Início")
-        self.assertIn("title.settings", tr["es"])
-        # every locale exposes the same key set (no missing translations)
-        self.assertEqual(set(tr["en"]), set(tr["pt-BR"]))
-        self.assertEqual(set(tr["es"]), set(tr["pt-BR"]))
+    def setUp(self):
+        self._lang = core.get_language()
+
+    def tearDown(self):
+        core.set_language(self._lang)
+
+    def test_the_seven_languages_load(self):
+        # os 6 idiomas da tabela de textos do proprio jogo + pt-BR
+        tabelas = core.load_translations()
+        self.assertEqual(set(tabelas), {"pt-BR", "en", "es", "fr", "de", "it", "ja"})
+        self.assertEqual(tabelas["pt-BR"]["rail.inicio"], "Início")
+        self.assertEqual(tabelas["en"]["rail.inicio"], "Home")
+        self.assertEqual(tabelas["ja"]["rail.settings"], "設定")
+
+    def test_tr_follows_the_current_language(self):
+        core.set_language("de")
+        self.assertEqual(core.tr("common.cancel"), "Abbrechen")
+        core.set_language("pt-BR")
+        self.assertEqual(core.tr("common.cancel"), "Cancelar")
+
+    def test_tr_fills_parameters(self):
+        core.set_language("en")
+        self.assertEqual(core.tr("err.iso_not_found", path="C:/jogo.iso"),
+                         "ISO file not found: C:/jogo.iso")
+
+    def test_tr_keeps_a_missing_parameter_visible(self):
+        # str.format explodiria; aqui o {path} fica a vista
+        core.set_language("en")
+        self.assertIn("{path}", core.tr("err.iso_not_found"))
+
+    def test_tr_falls_back_to_the_key(self):
+        self.assertEqual(core.tr("chave.que.nao.existe"), "chave.que.nao.existe")
+
+    def test_unknown_language_becomes_the_source(self):
+        self.assertEqual(core.set_language("xx"), core.SOURCE_LANGUAGE)
+
+    def test_match_language(self):
+        casos = {
+            "pt_BR": "pt-BR", "pt_PT": "pt-BR", "es_MX": "es", "fr_CA": "fr",
+            "de_AT": "de", "it_IT": "it", "ja_JP": "ja", "en_GB": "en",
+            "Portuguese_Brazil": "pt-BR", "Japanese_Japan": "ja",
+            "ru_RU": "en", "zh_CN": "en", "": "en", None: "en",
+        }
+        for entrada, esperado in casos.items():
+            self.assertEqual(core.match_language(entrada), esperado, entrada)
+
+    def test_resolve_language_keeps_a_saved_choice(self):
+        self.assertEqual(core.resolve_language("it"), "it")
+        self.assertIn(core.resolve_language(""), core.LANGUAGES)
+
+
+class CatalogIntegrity(unittest.TestCase):
+    """Cada idioma tem de bater com o catalogo-fonte (pt.json), e o codigo so pode
+    usar chaves que existem. Pega traducao faltando, {parametro} trocado e chave
+    orfa antes de alguem ver uma chave crua na tela."""
+
+    PREFIXOS = ("app", "pill", "common", "rail", "title", "home", "ov", "prog", "prep",
+                "add", "rm", "rb", "bk", "iso", "settings", "inst", "report", "kind",
+                "guess", "space", "tool", "err", "log", "progress", "dialog")
+
+    @classmethod
+    def setUpClass(cls):
+        import re
+        cls.re = re
+        cls.tabelas = core.load_translations()
+        cls.fonte = cls.tabelas[core.SOURCE_LANGUAGE]
+        cls.placeholder = re.compile(r"\{(\w+)\}")
+
+    def test_every_language_has_exactly_the_source_keys(self):
+        for lang, tabela in self.tabelas.items():
+            with self.subTest(lang=lang):
+                self.assertEqual(set(tabela) - set(self.fonte), set(), "chaves sobrando")
+                self.assertEqual(set(self.fonte) - set(tabela), set(), "traducoes faltando")
+
+    def test_no_empty_translations(self):
+        for lang, tabela in self.tabelas.items():
+            vazias = [k for k, v in tabela.items() if not isinstance(v, str) or not v.strip()]
+            self.assertEqual(vazias, [], lang)
+
+    def test_parameters_match_the_source(self):
+        for lang, tabela in self.tabelas.items():
+            for chave, texto in tabela.items():
+                with self.subTest(lang=lang, chave=chave):
+                    self.assertEqual(set(self.placeholder.findall(texto)),
+                                     set(self.placeholder.findall(self.fonte[chave])))
+
+    def test_bold_markers_are_balanced_and_kept(self):
+        for lang, tabela in self.tabelas.items():
+            for chave, texto in tabela.items():
+                with self.subTest(lang=lang, chave=chave):
+                    self.assertEqual(texto.count("**") % 2, 0, "'**' sem par")
+                    if "**" in self.fonte[chave]:
+                        self.assertIn("**", texto, "o negrito sumiu")
+
+    def test_folder_name_is_never_translated(self):
+        # "Arquivos da ISO" e o NOME de uma pasta no disco: traduzido, o usuario
+        # procuraria uma pasta que nao existe.
+        for lang, tabela in self.tabelas.items():
+            for chave, texto in tabela.items():
+                if "Arquivos da ISO" in self.fonte[chave]:
+                    with self.subTest(lang=lang, chave=chave):
+                        self.assertIn("Arquivos da ISO", texto)
+
+    def _chaves_no_codigo(self):
+        padrao = self.re.compile(r"""["']((?:%s)\.[a-z0-9_]+)["']""" % "|".join(self.PREFIXOS))
+        usadas = set()
+        for rel in ("frontend/index.html", "frontend/js/app.js", "backend/core.py", "backend/api.py"):
+            usadas |= set(padrao.findall((Path(ROOT) / rel).read_text(encoding="utf-8")))
+        return usadas
+
+    def test_every_key_used_in_the_code_exists(self):
+        self.assertEqual(sorted(self._chaves_no_codigo() - set(self.fonte)), [])
+
+    def test_every_catalog_key_is_used(self):
+        self.assertEqual(sorted(set(self.fonte) - self._chaves_no_codigo()), [])
+
+    def test_language_selector_offers_every_language(self):
+        html = (Path(ROOT) / "frontend" / "index.html").read_text(encoding="utf-8")
+        oferecidos = set(self.re.findall(r'<option value="([^"]+)" lang=', html))
+        self.assertEqual(oferecidos, set(core.LANGUAGES))
+
+
+class NoHardcodedBackendText(unittest.TestCase):
+    """Nenhuma mensagem ao usuario pode sair do Python como literal: tudo passa por
+    tr(). (O relatorio de erro fica de fora de proposito — vai para o
+    desenvolvedor, que le portugues.)"""
+
+    def _literais(self, rel, ignorar=()):
+        import ast
+        arvore = ast.parse((Path(ROOT) / rel).read_text(encoding="utf-8"))
+        fora = set()
+        for no in ast.walk(arvore):
+            if isinstance(no, ast.FunctionDef) and no.name in ignorar:
+                fora |= {id(x) for x in ast.walk(no)}
+        achados = []
+        for no in ast.walk(arvore):
+            if id(no) in fora or not isinstance(no, ast.Call):
+                continue
+            nome = getattr(no.func, "id", None) or getattr(no.func, "attr", None)
+            if nome not in ("ToolError", "log", "progress"):
+                continue
+            for arg in no.args:
+                for sub in ast.walk(arg):
+                    if isinstance(sub, ast.Constant) and isinstance(sub.value, str) \
+                            and " " in sub.value.strip():
+                        achados.append((no.lineno, sub.value))
+        return achados
+
+    def test_core_has_no_literal_messages(self):
+        self.assertEqual(self._literais("backend/core.py"), [])
+
+    def test_api_has_no_literal_messages(self):
+        self.assertEqual(self._literais("backend/api.py", ignorar=("_build_report",)), [])
 
 
 class MissingToolsGating(unittest.TestCase):
@@ -1256,6 +1401,62 @@ class IsoPreflight(unittest.TestCase):
         finally:
             core._mount_iso_drive, core._dismount_iso = orig_mount, orig_dis
         self.assertEqual(chamadas, [], "verify=False nao pode montar a imagem de novo")
+
+
+class DiskSpacePreflight(unittest.TestCase):
+    """Disco cheio virava o hash_build morrendo no meio da extracao com
+    "[PYI-xxxxx:ERROR] Failed to execute script" — mensagem que nao diz nada da
+    causa real, e so depois de 77% do processo."""
+
+    def test_refuses_when_it_does_not_fit_and_says_how_much(self):
+        import collections
+        import shutil as _sh
+
+        Uso = collections.namedtuple("Uso", "total used free")
+        original = _sh.disk_usage
+        _sh.disk_usage = lambda _p: Uso(total=500 * 1024 ** 3,
+                                        used=499 * 1024 ** 3,
+                                        free=1 * 1024 ** 3)
+        try:
+            with tempfile.TemporaryDirectory() as td:
+                with self.assertRaises(core.ToolError) as ctx:
+                    core.assert_free_space(Path(td), 9 * 1024 ** 3, "descompilar")
+                msg = str(ctx.exception)
+                self.assertIn("9.0 GB", msg, "tem de dizer quanto precisa")
+                self.assertIn("1.0 GB", msg, "e quanto ha livre")
+                self.assertIn("descompilar", msg, "e o que ia fazer")
+        finally:
+            _sh.disk_usage = original
+
+    def test_passes_when_it_fits(self):
+        with tempfile.TemporaryDirectory() as td:
+            core.assert_free_space(Path(td), 1024, "gravar um arquivinho")
+
+    def test_probes_an_existing_ancestor_when_the_target_does_not_exist_yet(self):
+        # O workspace pode ainda nao existir; a checagem tem de subir ate achar
+        # uma pasta real em vez de estourar.
+        with tempfile.TemporaryDirectory() as td:
+            core.assert_free_space(Path(td) / "nao" / "existe" / "ainda", 1024, "teste")
+
+
+class BuildOutputWarning(unittest.TestCase):
+    """O PyInstaller roda "Removing dir .../dist/<app>" a cada build: um workspace
+    de ~20 GB criado ali (com os backups do usuario) some no proximo rebuild."""
+
+    def test_warns_inside_a_build_folder(self):
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td) / "build_out" / "dist" / "MC3 Music Manager"
+            base.mkdir(parents=True)
+            aviso = core.build_output_warning(core.Workspace(base))
+            self.assertTrue(aviso)
+            self.assertIn("build_out", aviso)
+            self.assertIn("APAGA", aviso)
+
+    def test_silent_for_a_normal_install_path(self):
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td) / "Programs" / "MC3 Music Manager"
+            base.mkdir(parents=True)
+            self.assertEqual(core.build_output_warning(core.Workspace(base)), "")
 
 
 if __name__ == "__main__":
