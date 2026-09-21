@@ -1,5 +1,7 @@
 # Roadmap — porte web-view (faseado, sem quebrar o app atual)
 
+> **Status consolidado de todas as metas — batidas ou não, com a evidência de cada uma: [METAS.md](METAS.md).**
+
 Decisão do dono (2026-07-12): converter a UI para **web (HTML/CSS/JS) com backend
 Python**, stack **pywebview** (Edge WebView2). O app Tkinter original em
 `..\MC3 MUSIC TUT` **não é tocado** — este porte vive só nesta pasta.
@@ -15,7 +17,7 @@ plano, na ordem que reduz risco:
       entrada, backup em falha parcial). **Falta** o caminho feliz de `add_songs`
       ponta a ponta e o round-trip de strings (`decode_strings` →
       `compile_strings_json_to_strtbl`), que ainda não têm nenhum teste.
-- [x] Harness de teste do novo backend (`tests/test_core.py`) — **87 testes**.
+- [x] Harness de teste do novo backend (`tests/test_core.py`) — **123 testes** (+ ~5.400 subtestes de integridade dos catálogos).
 - [x] **Repositório git inicializado** — antes não havia nenhum: 5,6k linhas sem
       histórico. O `.gitignore` mantém fora os 21 GB de dados do jogo, o ffmpeg/ffprobe
       (189 MB, redistribuíveis) e os transcripts de sessão.
@@ -78,8 +80,7 @@ Migrar uma aba por vez, rodando em paralelo ao Tkinter até provar paridade:
 de verdade, não só com os testes. Os "falta real-run" acima estão desatualizados.
 
 **A Fase 3 está fechada — o app faz o loop inteiro** (Início guia: Preparar → Adicionar/Remover
-→ Recompilar → Gerar ISO). O i18n está completo (7 idiomas);
-e a Fase 4 (empacotar PyInstaller + Inno). 51/51 testes.
+→ Recompilar → Gerar ISO), com a interface em 7 idiomas. A Fase 4 (empacotar) também está feita.
 
 ## Fase 4 — Empacotar  ✅ FEITA
 - [x] PyInstaller (WebView2 já existe no Win 10/11; sem empacotar Chromium) —
@@ -94,7 +95,8 @@ Build completo:
 ```bash
 python packaging/make_tools_bundle.py
 python -m PyInstaller packaging/mc3.spec --noconfirm --distpath build_out/dist --workpath build_out/work
-ISCC.exe packaging\mc3.iss      # Inno Setup 6 — precisa estar instalado
+ISCC.exe packaging\mc3.iss      # Inno Setup 6.3+ (instalado por usuário em
+                                # %LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe)
 ```
 
 ## Formato do áudio — resolvido, não regredir

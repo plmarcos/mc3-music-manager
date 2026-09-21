@@ -30,8 +30,11 @@ copia nova do fonte, reponha os dois em `tools/wav to rsm/`:
   titulo/artista cai para adivinhacao pelo nome do arquivo.
 
 As ferramentas PS2 da comunidade (`dave.py`, `hash_build.py`, `strtbl.py`,
-`rstm_build.exe`, `ps2str`, `MFAudio`, `encvag.dll`) **estao** versionadas: sao
-pequenas e dificeis de reobter.
+`rstm_build.exe`) **estao** versionadas: sao pequenas e dificeis de reobter.
+Junto com elas vao `ps2str.exe` e `encvag.dll`, que **nao** sao da comunidade:
+sao componentes do SDK do PlayStation 2, com copyright da Sony Computer
+Entertainment. O `rstm_build` depende dos dois para converter WAV. Veja
+`LICENSES.md`.
 
 Confira o que o pacote vai levar com:
 

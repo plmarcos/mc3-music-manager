@@ -961,6 +961,14 @@ class GenerateIso(unittest.TestCase):
 class BusyLock(unittest.TestCase):
     """The busy-lock must be atomic: a second acquire fails until release."""
 
+    # Api() le o options.json REAL do projeto e troca o idioma global do backend;
+    # sem devolver, os testes seguintes recebiam mensagens no idioma do dev.
+    def setUp(self):
+        self._lang = core.get_language()
+
+    def tearDown(self):
+        core.set_language(self._lang)
+
     def _make_api(self):
         try:
             from backend.bridge import Bridge
@@ -1457,6 +1465,29 @@ class BuildOutputWarning(unittest.TestCase):
             base = Path(td) / "Programs" / "MC3 Music Manager"
             base.mkdir(parents=True)
             self.assertEqual(core.build_output_warning(core.Workspace(base)), "")
+
+
+class VersionConsistency(unittest.TestCase):
+    """O relatorio de erro usa APP_VERSION para saber qual build a pessoa tem; o
+    instalador mostra o AppVersion do mc3.iss. Os dois precisam ser o mesmo numero."""
+
+    def test_installer_and_app_report_the_same_version(self):
+        import re
+        from backend import api
+        iss = (Path(ROOT) / "packaging" / "mc3.iss").read_text(encoding="utf-8")
+        achado = re.search(r'#define\s+AppVersion\s+"([^"]+)"', iss)
+        self.assertIsNotNone(achado, "AppVersion nao encontrado no mc3.iss")
+        self.assertEqual(api.APP_VERSION, achado.group(1))
+
+    def test_installer_offers_the_app_languages(self):
+        import re
+        iss = (Path(ROOT) / "packaging" / "mc3.iss").read_text(encoding="utf-8")
+        nomes = set(re.findall(r'^Name:\s*"(\w+)";\s*MessagesFile:', iss, re.M))
+        self.assertEqual(len(nomes), len(core.LANGUAGES), nomes)
+        # e cada um tem o aviso dos ~20 GB (o espanhol ja ficou sem ele)
+        for nome in nomes:
+            with self.subTest(idioma=nome):
+                self.assertRegex(iss, r"(?m)^%s\.WelcomeLabel2=.*20 G" % nome)
 
 
 if __name__ == "__main__":

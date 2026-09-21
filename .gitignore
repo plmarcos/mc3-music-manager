@@ -43,14 +43,20 @@ desktop.ini
 # baixáveis, e a origem exata da build está documentada em LICENSES.md
 # (https://www.gyan.dev/ffmpeg/builds/). O app precisa deles em tempo de
 # execução — veja "Ferramentas externas" no README para repor numa cópia nova.
-# As ferramentas PS2 da comunidade (rstm_build/ps2str/MFAudio/encvag) FICAM
-# versionadas: são pequenas e difíceis de reobter.
+# O rstm_build (comunidade) e o par ps2str/encvag (SDK da Sony — veja LICENSES.md)
+# FICAM versionados: são pequenos e difíceis de reobter.
 # ─────────────────────────────────────────────────────────────────────────────
 /tools/wav to rsm/ffmpeg.exe
 /tools/wav to rsm/ffprobe.exe
 
 # Transcrições de sessão de IA — não são código-fonte
 /_claude-backup/
+
+# Documento interno de status: cita as unidades de disco e a rotina do dono
+/METAS.md
+
+# Subproduto do packaging/make_icon.py — regerado com `python packaging/make_icon.py`
+/packaging/mc3_icon_preview.png
 
 # Scratch da recompilacao de DATs (limpo sozinho; so sobra se o app for morto)
 /.mc3_rebuild/

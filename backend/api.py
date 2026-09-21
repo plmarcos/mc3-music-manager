@@ -32,8 +32,13 @@ from .tasks import run_in_background
 
 APP_NAME = "MC3 Music Manager"
 # Where the "Enviar relatório de erro" button sends reports (owner's inbox).
-REPORT_EMAIL = "207797225+plmarcos@users.noreply.github.com"
-APP_VERSION = "0.3.0 — web-view (fluxo guiado)"
+# Onde o usuario publica o relatorio de erro. Se o repositorio mudar de
+# nome/dono, e so trocar esta linha.
+REPORT_URL = "https://github.com/plmarcos/mc3-music-manager/issues"
+# So o numero: aparece no cabecalho da tela nos 7 idiomas, e o rotulo antigo
+# ("web-view (fluxo guiado)") era portugues fixo ali. Tem de bater com o
+# AppVersion do packaging/mc3.iss — um teste confere.
+APP_VERSION = "0.4.0"
 
 
 def _python_version() -> str:
@@ -754,32 +759,27 @@ class Api:
             webbrowser.open(url)
         return {"ok": bool(url), "url": url}
 
-    # ---- error report (one click -> pre-filled email to the developer) ------
+    # ---- error report (one click -> pre-filled issue on the project page) --
 
     def get_error_report(self, payload: dict) -> dict:
         """Build the full diagnostics + error text WITHOUT opening anything (Copiar)."""
-        return {"ok": True, "report": self._build_report(payload or {}, full=True), "email": REPORT_EMAIL}
+        return {"ok": True, "report": self._build_report(payload or {}, full=True), "url": REPORT_URL}
 
     def send_error_report(self, payload: dict) -> dict:
-        """Open the user's mail client pre-filled (mailto) with a COMPACT report.
-        Returns the FULL report too — mailto is length-capped and may not open if no
-        mail client is set, so the UI can still show/copy the complete text."""
+        """Open the project's issue page pre-filled with a COMPACT report.
+        Returns the FULL report too — the URL is length-capped and the browser may
+        not open at all, so the UI can still show/copy the complete text.
+        Nothing is submitted here: the user reviews the page and posts it."""
         p = payload or {}
-        subject = "[MC3] Relatorio de erro" + (f" - {p['screen']}" if p.get("screen") else "")
-        body = self._build_report(p, full=False)   # compact: fits the mailto URL
-        query = urllib.parse.urlencode({"subject": subject, "body": body}, quote_via=urllib.parse.quote)
-        mailto = f"mailto:{REPORT_EMAIL}?{query}"
+        title = "[MC3] Relatorio de erro" + (f" - {p['screen']}" if p.get("screen") else "")
+        body = self._build_report(p, full=False)   # compact: fits the URL
+        query = urllib.parse.urlencode({"title": title, "body": body}, quote_via=urllib.parse.quote)
         opened = False
         try:
-            os.startfile(mailto)  # noqa: S606 - hand off to the OS default mail client
-            opened = True
-        except OSError:
-            try:
-                webbrowser.open(mailto)
-                opened = True
-            except Exception:  # noqa: BLE001
-                opened = False
-        return {"ok": True, "opened": opened, "email": REPORT_EMAIL,
+            opened = bool(webbrowser.open(f"{REPORT_URL}/new?{query}"))
+        except Exception:  # noqa: BLE001
+            opened = False
+        return {"ok": True, "opened": opened, "url": REPORT_URL,
                 "report": self._build_report(p, full=True)}
 
     def _build_report(self, payload: dict, *, full: bool = True) -> str:
@@ -814,7 +814,7 @@ class Api:
                 found = fn()
             except Exception:  # noqa: BLE001
                 found = None
-            # full report keeps the resolved path; compact (mailto) drops it to fit.
+            # full report keeps the resolved path; compact (URL) drops it to fit.
             out.append(f"  {name:12} {'OK' if found else 'FALTA'}" + (f"  {found}" if (full and found) else ""))
 
         # A ISO e o dado que mais falta num relatorio remoto: quase toda falha de

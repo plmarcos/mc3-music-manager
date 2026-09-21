@@ -1236,7 +1236,7 @@ function showLoadError(elId, key) {
   if (el) { el.className = "tools bad"; setText(el, key || "common.backend_query_failed", null, "✖"); }
 }
 
-// ---- error report: one click -> pre-filled email to the developer ----------
+// ---- error report: one click -> pre-filled issue on the project page ------
 let lastError = null;
 
 // Called whenever a task fails: remembers what/where + the screen's console text,
@@ -1266,8 +1266,8 @@ async function sendErrorReport() {
     const r = await window.pywebview.api.send_error_report(reportPayload());
     showReport(r.report);
     const key = r.opened ? "report.opened" : "report.not_opened";
-    setText("report-info", key, { email: r.email });
-    setText("error-report-text", key, { email: r.email });
+    setText("report-info", key, { url: r.url });
+    setText("error-report-text", key, { url: r.url });
   } catch (e) { console.error(e); }
 }
 
@@ -1286,7 +1286,7 @@ async function copyReport() {
   try {
     const r = await window.pywebview.api.get_error_report(reportPayload());
     const ok = copyToClipboard(r.report);
-    setText("report-info", ok ? "report.copied" : "report.select_copy", { email: r.email });
+    setText("report-info", ok ? "report.copied" : "report.select_copy", { url: r.url });
   } catch (e) { console.error(e); }
 }
 

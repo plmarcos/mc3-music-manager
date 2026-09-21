@@ -1,23 +1,5 @@
 # CLAUDE.md — MC3 Music Manager (edição Web-view)
 
-> ## 🚨 O PC FOI FORMATADO EM 29/07/2026
->
-> O disco **C: foi apagado**; o SSD **F: (onde este projeto vive) foi desconectado e sobreviveu intacto**.
-> Sua memória de sessões anteriores **não existe mais** — ela estava no C:.
->
-> **ANTES DE QUALQUER COISA, leia o documento mestre de retomada:**
-> ### 📄 `F:\Importantes\MyScriptsClaude\RETOMAR-AQUI.md`
-> (fica **um nível acima** desta pasta — 9 seções: restaurar o ambiente, mapa dos projetos,
-> estado dos dois apps, decisões a não re-litigar, armadilhas e onde paramos)
->
-> **E restaure a memória** (100 arquivos, 10 projetos, já testado):
-> clique com o botão direito em
-> `F:\Importantes\MyScriptsClaude\_MEMORIA CLAUDE (BACKUP)\RESTAURAR-MEMORIA.ps1`
-> → *"Executar com o PowerShell"*.
->
-> Se o Python/ffmpeg/ImgBurn ainda não foram reinstalados, o **§2 do RETOMAR-AQUI.md** tem o passo a passo.
-> *(Quando o ambiente estiver restaurado e você tiver lido tudo, pode apagar este aviso.)*
-
 > **Leia este arquivo primeiro.** Ele existe para você (Claude) NÃO começar do zero.
 > Resume o que é o projeto, as decisões já tomadas, o estado atual, como rodar, e
 > as armadilhas a evitar. Complementa `README.md` (visão geral) e `ROADMAP.md` (plano).
@@ -40,7 +22,7 @@ O app **original em Tkinter** vive em `..\MC3 MUSIC TUT` e está **em uso diári
 - A diretriz do dono: **regressão do fluxo que funciona é o risco #1.**
 - Migração é **faseada, tela por tela, NUNCA big-bang.**
 
-## ✅ Estado atual (v0.3.0 — verificado na tela)
+## ✅ Estado atual (v0.4.0 — verificado na tela)
 
 Um "walking skeleton" + o **primeiro recurso real** funcionando ponta a ponta:
 - Janela pywebview renderiza (tema escuro moderno).
@@ -172,10 +154,10 @@ Um "walking skeleton" + o **primeiro recurso real** funcionando ponta a ponta:
     (`LicenseFile=`).
 - **Relatório de erro num clique (mailto):** quando uma tarefa falha, `noteError(tela, erro,
   console-id)` guarda `{tela, erro, log do console}` e revela a barra `#error-report-bar`; botão
-  **🐞 Enviar relatório** → `Api.send_error_report` monta o corpo **compacto** (erro no topo +
-  ambiente + ferramentas + workspace, sem os caminhos longos p/ caber no limite ~2048 do mailto),
-  abre o e-mail via `os.startfile("mailto:…")` (fallback `webbrowser.open`) pré-preenchido para
-  `REPORT_EMAIL = 207797225+plmarcos@users.noreply.github.com`; **📋 Copiar** → `get_error_report` devolve o relatório
+  **🐞 Relatar erro** → `Api.send_error_report` monta o corpo **compacto** (erro no topo +
+  ambiente + ferramentas + workspace, sem os caminhos longos p/ caber no limite da URL) e abre
+  `webbrowser.open(REPORT_URL + "/new?title=…&body=…")`, ou seja, a página de issues do projeto
+  já preenchida — nada é postado sem o usuário; **📋 Copiar** → `get_error_report` devolve o relatório
   COMPLETO (com caminhos) numa `<textarea>` + `execCommand('copy')`. Também há uma seção **Suporte**
   em Configurações. **Sem servidor, sem senha** — o usuário revisa e envia. Verificado: barra some no
   boot (fix do `[hidden]`), aparece no erro, captura o log do console, e chama as 2 APIs certas.
@@ -187,13 +169,14 @@ Um "walking skeleton" + o **primeiro recurso real** funcionando ponta a ponta:
 
 ## 📍 Onde o app está instalado (uso real)
 
-**`F:\MC3 Music Manager\`** — o executável, a `_internal` **e o workspace do dono** (extração,
-`backups/`, as músicas adicionadas). Foi movido para cá de `build_out\dist\` em 2026-09-17,
-conferido arquivo a arquivo (17.649 arquivos; SHA-256 dos 27 insubstituíveis).
+O app de uso real mora **fora da pasta de build**, num diretório próprio que guarda o
+executável, a `_internal` **e o workspace do dono** (extração, `backups/`, as músicas
+adicionadas). A mudança de `build_out\dist\` foi feita em 2026-09-17 e conferida arquivo
+a arquivo (17.649 arquivos; SHA-256 dos 27 insubstituíveis).
 
 **Para atualizar esse app com um build novo**, troque só o programa — NUNCA a pasta inteira:
 1. gere o build normalmente (`build_out\dist\MC3 Music Manager\`);
-2. copie o `MC3 Music Manager.exe` e espelhe a `_internal\` para `F:\MC3 Music Manager\`;
+2. copie o `MC3 Music Manager.exe` e espelhe a `_internal\` para a pasta de uso real;
 3. `ASSETS/`, `STREAMS/`, `Arquivos da ISO/`, `backups/`, os DATs, `mcstrings02.*` e
    `options.json` ficam como estão.
 
@@ -283,7 +266,7 @@ tests/test_core.py
 ```bash
 pip install -r requirements.txt      # pywebview>=6.2
 python main.py                       # abre a janela
-python -m pytest -q                  # roda os testes (87)
+python -m pytest -q                  # roda os testes (123 + ~5.400 subtestes)
 python -m py_compile backend/*.py main.py   # checagem rápida
 ```
 Ambiente confirmado: **Python 3.14.4**, **pywebview 6.2.1**, `pythonw` no PATH =
@@ -315,6 +298,20 @@ Ambiente confirmado: **Python 3.14.4**, **pywebview 6.2.1**, `pythonw` no PATH =
 - **Manutenção dupla:** enquanto porta, o app Tkinter original segue sendo mantido.
 
 ## 🐛 Gotchas técnicos já descobertos
+
+- **O idioma do backend é estado GLOBAL — teste nenhum pode depender dele.** `core.tr` lê
+  `core._language`, e `Api()` o troca ao ler o `options.json` **real** do projeto. O teste
+  `BusyLock` cria a `Api` de verdade: quando o dono trocou o app para inglês, os testes
+  seguintes passaram a receber mensagens em inglês e falharam procurando "ffmpeg falhou",
+  "repetido", "APAGA" — **o resultado da suíte dependia da preferência de quem roda**.
+  Corrigido em duas frentes: `tests/conftest.py` (fixture autouse do pytest que volta ao
+  idioma de origem antes de CADA teste) e `BusyLock.tearDown` (para o `unittest` puro, que
+  não lê o conftest). Novo teste que troque o idioma: restaure no `tearDown`.
+
+- **Versão em dois lugares, amarrados por teste.** `backend/api.py` (`APP_VERSION`) e
+  `packaging/mc3.iss` (`AppVersion`) — o relatório de erro usa o primeiro para saber qual
+  build a pessoa tem, o instalador mostra o segundo. `VersionConsistency` falha se
+  divergirem, e também se o instalador perder um idioma ou o aviso dos ~20 GB.
 
 - **💥 REBUILD APAGA O WORKSPACE — nunca rode o app de dentro de `build_out/dist/`
   para uso real.** O app monta o workspace **ao lado do `.exe`** (`core._app_root`),
@@ -526,10 +523,10 @@ Ver **`ROADMAP.md`** (fonte da verdade). Resumo:
 
 ## 🔗 Projeto original (referência para portar a lógica)
 
-- Local encontrado (2026-09): **`F:\MC3 MUSIC TUT\mc3_music_manager.py`** — Tkinter,
-  **5.070 linhas, datado de abril/2026**. ⚠️ Este arquivo descrevia o original com ~9.600
-  linhas, então essa cópia pode ser **mais antiga** que a usada no porte: confira antes de
-  tomar como referência. (O caminho `F:\Importantes\...` citado antes não existe.)
+- Local encontrado (2026-09): o `mc3_music_manager.py` do projeto Tkinter, fora deste
+  repositório — **5.070 linhas, datado de abril/2026**. ⚠️ Este arquivo descrevia o original
+  com ~9.600 linhas, então essa cópia pode ser **mais antiga** que a usada no porte: confira
+  antes de tomar como referência.
   (a lógica a portar vive nos métodos `_impl`/worker
   que recebem dados puros e levantam `RuntimeError` — ex.: `_convert_to_rsm`,
   `_apply_add_specs`, `_rebuild_*_dat_impl`, `_mount_iso_drive`, backup helpers).

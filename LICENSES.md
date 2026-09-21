@@ -51,12 +51,30 @@ sem download manual. Todos os créditos aos autores originais.
 | `dave` | empacota/desempacota `ASSETS.DAT` |
 | `hash_build` | empacota/desempacota `STREAMS.DAT` (algoritmo de hash `MClub`) |
 | `strtbl` | decodifica/codifica `mcstrings02.strtbl` |
-| `rstm_build` | converte WAV → RSM (áudio do PS2) |
-| `ps2str`, `ps2strw`, `MFAudio`, `encvag.dll` | utilitários de áudio PS2 |
+| `rstm_build` | converte WAV → RSM (áudio do PS2) — por Edness, v1.4.2 |
 
 Se você é autor de alguma destas ferramentas e quer que o aviso de licença seja
-ajustado, corrigido ou que ela seja removida deste pacote, entre em contato — será
-atendido prontamente.
+ajustado, corrigido ou que ela seja removida deste pacote, abra uma issue em
+<https://github.com/plmarcos/mc3-music-manager/issues> — será atendido prontamente.
+
+---
+
+## ⚠️ Componentes do SDK do PlayStation 2 (Sony)
+
+Dois arquivos que acompanham o programa **não são** da comunidade de modding: são
+componentes do SDK oficial do PlayStation 2. O aviso abaixo foi lido do próprio
+binário.
+
+| Arquivo | Aviso embutido | Função |
+|---|---|---|
+| `ps2str.exe` | Copyright (C) 1999, 2000 Sony Computer Entertainment Inc. | converte WAV → ADS/SS2; é quem o `rstm_build` chama |
+| `encvag.dll` | Copyright (C) 1998-1999 Sony Computer Entertainment Inc. | codificador VAG que o `ps2str` carrega — sem ele o `ps2str` nem inicia |
+
+São redistribuídos **sem autorização da Sony**, apenas porque o `rstm_build` depende
+deles e não se conhece substituto livre que produza o mesmo resultado. Nenhum vínculo
+com a Sony Computer Entertainment é sugerido ou implicado. Se a Sony, ou quem a
+represente, pedir a retirada, ela será feita imediatamente — abra uma issue em
+<https://github.com/plmarcos/mc3-music-manager/issues>.
 
 ---
 
