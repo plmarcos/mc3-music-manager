@@ -7,6 +7,8 @@ enviar nada para lugar nenhum.
 App de desktop para Windows: interface em HTML/CSS/JS numa janela nativa
 (**pywebview** sobre o Edge WebView2), backend em **Python**.
 
+![Tela inicial do MC3 Music Manager: painel com contagem de músicas e playlists, programas necessários e o passo a passo do fluxo](docs/img/inicio.webp)
+
 > ### ⚠️ Nenhum arquivo do jogo acompanha este programa
 >
 > *Midnight Club 3: DUB Edition Remix* é © Rockstar Games / Take-Two Interactive.
@@ -41,6 +43,25 @@ Outras coisas que ele faz por você:
 - **Relatório de erro em um clique**: junta o diagnóstico do app com o último erro e
   abre a página de issues já preenchida — você revisa e publica. Nada é enviado sem você.
 
+### As telas
+
+**Adicionar música** — escolha o MP3/FLAC/WAV e pronto: a conversão para RSM acontece
+sozinha. Título, artista e gênero vêm das tags; as playlists de destino são marcáveis
+uma a uma ou por atalho (padrão completo, só gênero, só cidades).
+
+![Tela de adicionar música, com seletor de modo uma música ou lote, campos de título, artista e gênero, e a lista de playlists de destino](docs/img/adicionar.webp)
+
+**Remover** — lista tudo que está instalado, com busca e filtro por gênero, quantas
+playlists citam cada faixa e se ela tem texto na tabela do jogo. Toda ação destrutiva
+exige marcar a confirmação antes de o botão funcionar.
+
+![Tela de remover música, com a lista de faixas instaladas, filtros e a trava de confirmação](docs/img/remover.webp)
+
+**Recompilar & Backup** — remonta os `.DAT` com as ferramentas PS2 reais e mantém a
+rede de segurança: cada operação destrutiva salva uma sessão de backup restaurável.
+
+![Tela de recompilar DATs e de backup, mostrando os botões STREAMS.DAT, ASSETS.DAT e recompilar tudo, e a data do último backup](docs/img/recompilar.webp)
+
 ### Sobre o formato do áudio
 
 Uma faixa convertida "quase certo" toca **muda** no jogo. O `.rsm` que as ferramentas
@@ -54,6 +75,8 @@ as 135 músicas do próprio jogo e é corrigido automaticamente em toda convers�
 Interface e mensagens em **7 idiomas** — português, inglês, espanhol, francês, alemão,
 italiano e japonês (os 6 do próprio jogo, mais o português). Na primeira execução o app
 segue o idioma do Windows; depois é trocável a qualquer momento, ao vivo.
+
+![Tela de configurações, com o seletor de idioma da interface, o estado dos programas do PC e as preferências do fluxo](docs/img/config.webp)
 
 > As traduções ainda não passaram por revisão de falantes nativos. Correções são
 > bem-vindas — cada idioma é um único arquivo em `frontend/locales/`.
