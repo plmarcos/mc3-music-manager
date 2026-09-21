@@ -88,6 +88,8 @@ Source: "{#SourceDir}\_internal\*"; DestDir: "{app}\_internal"; Flags: ignorever
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 ; Third-party notices (FFmpeg LGPL/GPL, PS2 tools, pywebview...) — required.
 Source: "..\LICENSES.md"; DestDir: "{app}"; Flags: ignoreversion
+; A MIT exige que o texto da licença acompanhe as cópias do programa.
+Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"
