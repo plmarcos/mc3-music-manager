@@ -114,6 +114,11 @@ represente, pedir a retirada, ela será feita imediatamente — abra uma issue e
 O MC3 Music Manager é um projeto pessoal, sem fins lucrativos e **não-oficial**,
 feito para quem quer trocar a trilha sonora da própria cópia do jogo.
 
+O **código escrito para este projeto** (`main.py`, `backend/`, `frontend/`,
+`packaging/`, `tests/` e a documentação) está sob a licença **MIT** — veja o arquivo
+`LICENSE`. A MIT vale só para esse código: **não** cobre os binários de terceiros
+listados acima nem qualquer conteúdo do jogo.
+
 **Sem garantia.** O programa mexe em arquivos do seu jogo. Ele faz **backup
 automático** antes de qualquer operação destrutiva, mas o uso é por sua conta e
 risco. Sempre mantenha uma cópia da sua ISO original.

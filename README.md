@@ -1,72 +1,169 @@
-# MC3 Music Manager — Web-view edition (protótipo)
+# MC3 Music Manager
 
-Porte da interface do MC3 Music Manager para **HTML/CSS/JS** dentro de uma
-janela **pywebview**, mantendo o **Python** como backend (reaproveitando os
-tools PS2 `dave.py` / `hash_build.py` / `strtbl.py` / `rstm_build.py`, ffmpeg,
-ISO, backup).
+Troque a trilha sonora do **Midnight Club 3: DUB Edition Remix** (PlayStation 2) pelas
+suas próprias músicas — a partir da **sua** cópia do jogo, na **sua** máquina, sem
+enviar nada para lugar nenhum.
 
-> O projeto original em Tkinter **não é modificado** — este porte vive só nesta
-> pasta. Migração faseada: primeiro o esqueleto + a arquitetura, depois cada
-> funcionalidade é portada uma a uma, provando paridade antes de trocar.
+App de desktop para Windows: interface em HTML/CSS/JS numa janela nativa
+(**pywebview** sobre o Edge WebView2), backend em **Python**.
 
-## Rodar
+> ### ⚠️ Nenhum arquivo do jogo acompanha este programa
+>
+> *Midnight Club 3: DUB Edition Remix* é © Rockstar Games / Take-Two Interactive.
+> Este é um projeto **não-oficial**, sem vínculo com a Rockstar ou a Take-Two.
+> Todo o conteúdo do jogo (ASSETS, STREAMS, playlists, textos, ISO) é gerado a partir
+> do disco que **você** já tem. Você é responsável por respeitar as leis de direito
+> autoral do seu país, tanto quanto à cópia de segurança do jogo quanto às músicas
+> que adicionar.
+
+---
+
+## O que ele faz
+
+O app guia o ciclo inteiro, do disco original à ISO modificada:
+
+| # | Passo | O que acontece |
+|---|---|---|
+| 1 | **Preparar Projeto** | Confere se a ISO é a versão suportada, copia o conteúdo para uma pasta de trabalho e descompila `ASSETS.DAT`, `STREAMS.DAT` e a tabela de textos |
+| 2 | **Adicionar música** | MP3/FLAC/OGG/M4A/WAV → formato do PS2, com título, artista, gênero e playlists. Uma faixa por vez ou **em lote** |
+| 3 | **Remover** | Lista o que está instalado e tira o áudio, as entradas de playlist e os textos |
+| 4 | **Recompilar & Backup** | Remonta os `.DAT` e mantém sessões de backup restauráveis |
+| 5 | **Gerar ISO** | Constrói a ISO final via ImgBurn, pronta para emulador ou PS2 |
+
+Outras coisas que ele faz por você:
+
+- **Backup automático** antes de toda operação destrutiva, com restauração por sessão.
+- **Confere o espaço em disco** antes de copiar e antes de descompilar (o processo
+  todo pede uns 20 GB) — em vez de morrer no meio.
+- **Recusa uma ISO que não seja a versão suportada**, em vez de produzir um jogo quebrado.
+- **Lê as tags** do arquivo de áudio e preenche título/artista sozinho.
+- Instala **ffmpeg**, **ImgBurn** e **foobar2000** via `winget`, se você não os tiver.
+- **Relatório de erro em um clique**: junta o diagnóstico do app com o último erro e
+  abre a página de issues já preenchida — você revisa e publica. Nada é enviado sem você.
+
+### Sobre o formato do áudio
+
+Uma faixa convertida "quase certo" toca **muda** no jogo. O `.rsm` que as ferramentas
+públicas geram diverge do formato do MC3 em quatro campos (taxa de amostragem, início
+do loop, o campo em `0x24` e um frame de inicialização do SPU). Isso foi medido contra
+as 135 músicas do próprio jogo e é corrigido automaticamente em toda conversão.
+**Confirmado no jogo**: 12 faixas adicionadas pelo app tocaram normalmente.
+
+## Idiomas
+
+Interface e mensagens em **7 idiomas** — português, inglês, espanhol, francês, alemão,
+italiano e japonês (os 6 do próprio jogo, mais o português). Na primeira execução o app
+segue o idioma do Windows; depois é trocável a qualquer momento, ao vivo.
+
+> As traduções ainda não passaram por revisão de falantes nativos. Correções são
+> bem-vindas — cada idioma é um único arquivo em `frontend/locales/`.
+
+## Requisitos
+
+- **Windows 10 ou 11** (o WebView2 já vem instalado).
+- Sua própria cópia de *Midnight Club 3: DUB Edition Remix* (PS2), em ISO.
+- **ffmpeg** e **ffprobe** — veja [Ferramentas externas](#ferramentas-externas).
+- **ImgBurn**, só para gerar a ISO final. O app oferece instalar.
+- Uns **20 GB livres** durante o processo.
+
+## Instalar
+
+Baixe o `MC3_Music_Manager_Setup.exe` da página de **Releases** — ou gere o seu, veja
+[Empacotar](#empacotar). A instalação é **por usuário, sem pedir administrador**.
+
+> O instalador não é assinado digitalmente, então o SmartScreen do Windows vai avisar
+> que o autor é desconhecido: *Mais informações* → *Executar assim mesmo*.
+
+## Rodar do código-fonte
 
 ```bash
 pip install -r requirements.txt
 python main.py
 ```
 
-## Ferramentas externas (nao versionadas)
+Testado com **Python 3.14** e **pywebview 6.2**. Para abrir o DevTools numa build
+empacotada, defina `MC3_DEBUG=1`.
 
-O repositorio **nao** guarda `ffmpeg.exe` nem `ffprobe.exe` (189 MB somados): sao
-redistribuiveis de terceiros, e a build exata esta creditada em `LICENSES.md`. Numa
-copia nova do fonte, reponha os dois em `tools/wav to rsm/`:
+## Ferramentas externas
 
-- Baixe uma build Windows em <https://www.gyan.dev/ffmpeg/builds/> (a mesma origem
-  citada no `LICENSES.md`) e copie `ffmpeg.exe` e `ffprobe.exe` para
-  `tools/wav to rsm/`.
-- Sem `ffmpeg` o app **nao converte** MP3/FLAC/OGG (so `.wav`/`.ads`/`.ss2`/`.rsm`
-  passam direto); sem `ffprobe` ele **nao le as tags**, e o auto-preenchimento de
-  titulo/artista cai para adivinhacao pelo nome do arquivo.
+O repositório **não** guarda `ffmpeg.exe` nem `ffprobe.exe` (189 MB somados): são
+redistribuíveis de terceiros e a build exata está creditada em [LICENSES.md](LICENSES.md).
+Numa cópia nova do código, baixe uma build Windows em
+<https://www.gyan.dev/ffmpeg/builds/> e copie os dois para `tools/wav to rsm/`.
+
+Sem o `ffmpeg` o app **não converte** MP3/FLAC/OGG (só `.wav`/`.ads`/`.ss2`/`.rsm` passam
+direto); sem o `ffprobe` ele **não lê as tags**, e o preenchimento de título/artista cai
+para adivinhação pelo nome do arquivo.
 
 As ferramentas PS2 da comunidade (`dave.py`, `hash_build.py`, `strtbl.py`,
-`rstm_build.exe`) **estao** versionadas: sao pequenas e dificeis de reobter.
-Junto com elas vao `ps2str.exe` e `encvag.dll`, que **nao** sao da comunidade:
-sao componentes do SDK do PlayStation 2, com copyright da Sony Computer
-Entertainment. O `rstm_build` depende dos dois para converter WAV. Veja
-`LICENSES.md`.
+`rstm_build.exe`) **estão** versionadas: são pequenas e difíceis de reobter. Junto com
+elas vão `ps2str.exe` e `encvag.dll`, que **não** são da comunidade — são componentes do
+SDK do PlayStation 2, com copyright da Sony Computer Entertainment. O `rstm_build`
+depende dos dois para converter WAV. Leia o aviso completo em [LICENSES.md](LICENSES.md).
 
-Confira o que o pacote vai levar com:
+Confira o que o pacote vai levar:
 
 ```bash
 python packaging/make_tools_bundle.py --check
 ```
 
+## Empacotar
+
+```bash
+python packaging/make_tools_bundle.py
+python -m PyInstaller packaging/mc3.spec --noconfirm --distpath build_out/dist --workpath build_out/work
+ISCC.exe packaging\mc3.iss
+```
+
+O `mc3.spec` **falha o build de propósito** se faltar um item obrigatório no bundle, ou
+se encontrar dados de usuário (backups, `STREAMS/`, `ASSETS/`, `.DAT`) na pasta de saída
+— foi assim que o `ffprobe.exe` ficou de fora uma vez e a leitura de tags morreu em
+silêncio no app instalado.
+
+## Testes
+
+```bash
+python -m pytest -q
+```
+
+**123 testes** e cerca de **5.400 subtestes** (integridade dos 7 catálogos de tradução).
+Cobrem a conversão de áudio, a recompilação, a validação de entrada, o backup, os
+pré-voos de disco e ISO, e a conformidade do `.rsm` com o formato do jogo.
+
 ## Estrutura
 
 ```
-main.py                 # entrada: cria a janela pywebview + expõe a Api
+main.py                  # entrada: cria a janela pywebview e expõe a Api
 backend/
-  api.py                # ponte JS -> Python (pywebview.api.*)
-  bridge.py             # ponte Python -> JS (progresso/log/status ao vivo)
-  tasks.py              # tarefas em background (equivalente a _start_background_task)
+  core.py                # lógica de domínio — zero import de UI
+  api.py                 # ponte JS -> Python (pywebview.api.*)
+  bridge.py              # ponte Python -> JS (progresso/log/status ao vivo)
+  tasks.py               # tarefas em segundo plano
 frontend/
-  index.html            # a UI
-  css/style.css         # tema (a liberdade visual que o Tkinter não dá)
-  js/app.js             # controlador: chama a Api e ouve os eventos push
+  index.html             # a interface
+  css/style.css          # tema
+  js/app.js              # controlador + motor de i18n
+  locales/*.json         # 7 idiomas, uma chave por mensagem
+tools/                   # CLIs PS2 (dave, hash_build, strtbl, rstm_build)
+packaging/               # spec do PyInstaller, script do Inno Setup, ícone
+tests/                   # a suíte
 ```
 
-## O que este esqueleto já prova
+`backend/core.py` não importa nada de UI: recebe callbacks de progresso e levanta
+exceções. É o que permite testar o fluxo inteiro sem abrir uma janela.
 
-- Janela nativa (Edge WebView2), sem empacotar Chromium.
-- **JS → Python**: `get_app_info`, `pick_folder` (diálogo **nativo** do Windows).
-- **Python → JS**: tarefa em thread transmitindo **progresso + log ao vivo**
-  (a parte mais arriscada da migração — o modelo de fila do Tkinter virando IPC).
+## Licenças e aviso legal
 
-## Próximas fases (planejado)
+- O **código deste repositório** está sob a licença MIT — veja [LICENSE](LICENSE).
+- Os **componentes de terceiros** que acompanham o programa (ffmpeg, ferramentas PS2,
+  pywebview, WebView2) têm avisos próprios em [LICENSES.md](LICENSES.md). Leia antes de
+  redistribuir.
+- **Sem garantia.** O programa mexe nos arquivos do seu jogo. Ele faz backup automático
+  antes de qualquer operação destrutiva, mas o uso é por sua conta e risco. Mantenha
+  sempre uma cópia da sua ISO original.
 
-1. Extrair a lógica de domínio do `mc3_music_manager.py` para módulos backend
-   reutilizáveis (sem UI).
-2. Portar tela a tela: Adicionar música → Remover → Preparar/Gerar ISO.
-3. i18n em JSON (pt-BR/en-US/es-ES) reaproveitando as traduções existentes.
-4. Empacotar com PyInstaller (o WebView2 já existe no Windows 10/11).
+## Histórico e planejamento
+
+[ROADMAP.md](ROADMAP.md) tem o plano faseado e o que já foi entregue.
+[CLAUDE.md](CLAUDE.md) é o caderno técnico: decisões tomadas, armadilhas encontradas e
+o porquê de cada uma.
